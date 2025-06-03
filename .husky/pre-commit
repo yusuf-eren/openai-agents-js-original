@@ -1,0 +1,10 @@
+# run prettier on staged files
+pnpm prettier $(git diff --cached --name-only --diff-filter=ACMR | sed 's| |\\ |g') --write --ignore-unknown
+git update-index --again
+
+# run lint on staged files
+pnpm eslint $(git diff --cached --name-only --diff-filter=ACMR | sed 's| |\\ |g') --fix
+git update-index --again
+
+# check for secrets
+trufflehog git file://. --since-commit HEAD --fail

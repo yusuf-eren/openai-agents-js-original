@@ -1,0 +1,66 @@
+---
+title: 人間の介入（HITL）
+description: Add a human in the loop check for your agent executions
+---
+
+import { Aside, Code } from '@astrojs/starlight/components';
+import humanInTheLoopExample from '../../../../../../examples/docs/human-in-the-loop/index.ts?raw';
+import toolApprovalDefinition from '../../../../../../examples/docs/human-in-the-loop/toolApprovalDefinition.ts?raw';
+
+このガイドでは、エージェントの実行を人間の介入で一時停止・再開できる、組み込みの Human-in-the-loop 機能の使い方を説明します。
+
+主なユースケースは、機密度の高いツール呼び出しに対する承認の取得です。
+
+## 承認リクエスト
+
+`needsApproval` オプションを `true`、または boolean を返す非同期関数に設定すると、承認が必要なツールを定義できます。
+
+<Code
+  lang="typescript"
+  code={toolApprovalDefinition}
+  title="Tool approval definition"
+  meta={`{10}`}
+/>
+
+### フロー
+
+1. エージェントがツール（複数可）を呼び出そうとすると、`needsApproval` を評価してそのツールが承認を必要とするか確認します
+2. 承認が必要な場合、エージェントは承認がすでに許可・拒否されているかを確認します
+   - まだ許可・拒否されていない場合、ツールは「ツール呼び出しを実行できない」という固定メッセージをエージェントに返します
+   - 許可 / 拒否が未決の場合、ツール承認リクエストをトリガーします
+3. エージェントはすべてのツール承認リクエストを集め、実行を中断します
+4. 中断がある場合、[実行結果](/ja/guides/result) には保留中のステップを示す `interruptions` 配列が含まれます。ツール呼び出しに確認が必要なときは `type: "tool_approval_item"` の `ToolApprovalItem` が現れます
+5. `result.state.approve(interruption)` または `result.state.reject(interruption)` を呼び出してツール呼び出しを許可・拒否できます
+6. すべての中断を処理したら、`result.state` を `runner.run(agent, state)` に渡して実行を再開します。ここで `agent` は最初に実行を開始させたエージェントです
+7. フローは 1 に戻ります
+
+## 例
+
+以下は、ターミナルで承認を促し、一時的に state をファイルへ保存する Human-in-the-loop フローの、より完全な例です。
+
+<Code
+  lang="typescript"
+  code={humanInTheLoopExample}
+  title="Human in the loop"
+/>
+
+動作するエンドツーエンド版は [完全なスクリプト](https://github.com/openai/openai-agents-js/tree/main/examples/agent-patterns/human-in-the-loop.ts) を参照してください。
+
+## 長時間の承認待ちへの対応
+
+Human-in-the-loop フローは、サーバーを起動し続けなくても長時間一時停止できるよう設計されています。リクエストを終了して後で続行したい場合、state をシリアライズして後で再開できます。
+
+`JSON.stringify(result.state)` で state をシリアライズし、後で `RunState.fromString(agent, serializedState)` にシリアライズ済みの state を渡して再開します。ここで `agent` は実行を開始させたエージェントのインスタンスです。
+
+この方法で、シリアライズした state をデータベースやリクエストと一緒に保存できます。
+
+### 保留タスクのバージョニング
+
+<Aside>
+  これは主に、シリアライズした state
+  を長期間保存し、その間にエージェントを変更したい場合に該当します
+</Aside>
+
+承認に時間がかかり、エージェント定義を意味のある形でバージョン管理したい、または Agents SDK のバージョンを上げたい場合、現時点では package alias を使って 2 つの Agents SDK を並行インストールし、独自にブランチロジックを実装することを推奨します。
+
+実際には、独自にコードのバージョン番号を割り当て、それをシリアライズした state と一緒に保存し、デシリアライズ時に正しいコードバージョンへ誘導する形になります。

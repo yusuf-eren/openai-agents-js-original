@@ -1,0 +1,50 @@
+---
+title: AI SDK で任意モデルを指定
+description: Connect your Agents SDK agents to any model through the Vercel AI SDK
+---
+
+import { Aside, Steps, Code } from '@astrojs/starlight/components';
+import aiSdkSetupExample from '../../../../../../examples/docs/extensions/ai-sdk-setup.ts?raw';
+
+<Aside type="caution">
+  このアダプターはまだベータ版です。特に小規模なモデルプロバイダーでは問題が発生する可能性があります。問題を発見された場合は
+  [GitHub issues](https://github.com/openai/openai-agents-js/issues)
+  からご報告ください。迅速に対応します。
+</Aside>
+
+Agents SDK は、標準で Responses API または Chat Completions API を通じて OpenAI モデルと動作します。別のモデルを使用したい場合は、[Vercel AI SDK](https://sdk.vercel.ai/) がサポートするさまざまなモデルを、このアダプター経由で Agents SDK に組み込むことができます。
+
+## セットアップ
+
+<Steps>
+
+1. extensions パッケージをインストールして AI SDK アダプターを追加します:
+
+   ```bash
+   npm install @openai/agents-extensions
+   ```
+
+2. [Vercel AI SDK](https://sdk.vercel.ai/docs/models/overview) から使用したいモデルパッケージを選択してインストールします:
+
+   ```bash
+   npm install @vercel/ai
+   ```
+
+3. エージェントに接続するためにアダプターとモデルをインポートします:
+
+   ```typescript
+   import { openai } from '@ai-sdk/openai';
+   import { aisdk } from '@openai/agents-extensions';
+   ```
+
+4. エージェントが使用するモデルのインスタンスを初期化します:
+
+   ```typescript
+   const model = aisdk(openai('o4-mini'));
+   ```
+
+</Steps>
+
+## 例
+
+<Code lang="typescript" code={aiSdkSetupExample} title="AI SDK セットアップ" />

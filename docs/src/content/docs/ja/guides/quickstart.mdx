@@ -1,0 +1,164 @@
+---
+title: クイックスタート
+description: Create your first AI Agent from scratch
+---
+
+import { Steps } from '@astrojs/starlight/components';
+import { Code } from '@astrojs/starlight/components';
+import quickstartExample from '../../../../../../examples/docs/quickstart/index.ts?raw';
+
+## プロジェクト設定
+
+<Steps>
+
+1. プロジェクトを作成し、npm を初期化します。これは一度だけで構いません。
+
+   ```bash
+   mkdir my_project
+   cd my_project
+   npm init -y
+   ```
+
+2. Agents SDK をインストールします。
+
+   ```bash
+   npm install @openai/agents
+   ```
+
+3. OpenAI API キーを設定します。キーがない場合は、[こちらの手順](https://platform.openai.com/docs/quickstart#create-and-export-an-api-key)に従って OpenAI API キーを作成してください。
+
+   ```bash
+   export OPENAI_API_KEY=sk-...
+   ```
+
+</Steps>
+
+## 最初のエージェントの作成
+
+エージェントは instructions と name で定義します。
+
+```typescript
+import { Agent } from '@openai/agents';
+
+const agent = new Agent({
+  name: 'History Tutor',
+  instructions:
+    'You provide assistance with historical queries. Explain important events and context clearly.',
+});
+```
+
+## 最初のエージェントの実行
+
+`run` メソッドを使用してエージェントを実行できます。開始したいエージェントと渡したい入力を両方指定して実行します。
+
+これにより、最終出力とその実行中に実行されたアクションを含む result が返されます。
+
+```typescript
+import { Agent, run } from '@openai/agents';
+
+const agent = new Agent({
+  name: 'History Tutor',
+  instructions:
+    'You provide assistance with historical queries. Explain important events and context clearly.',
+});
+
+const result = await run(agent, 'When did sharks first appear?');
+
+console.log(result.finalOutput);
+```
+
+## エージェントにツールを提供
+
+エージェントに情報を検索したりアクションを実行したりするためのツールを与えることができます。
+
+```typescript
+import { Agent, tool } from '@openai/agents';
+
+const historyFunFact = tool({
+  // The name of the tool will be used by the agent to tell what tool to use.
+  name: 'history_fun_fact',
+  // The description is used to describe **when** to use the tool by telling it **what** it does.
+  description: 'Give a fun fact about a historical event',
+  execute: async () => {
+    // The output will be returned back to the Agent to use
+    return 'Sharks are older than trees.';
+  },
+});
+
+const agent = new Agent({
+  name: 'History Tutor',
+  instructions:
+    'You provide assistance with historical queries. Explain important events and context clearly.',
+  // Adding the tool to the agent
+  tools: [historyFunFact],
+});
+```
+
+## さらなるエージェントの追加
+
+追加のエージェントを同様に定義して、問題をより小さな部分に分割し、各エージェントが現在のタスクに集中できるようにします。また、エージェントごとにモデルを指定することで、異なる問題に対して異なるモデルを使用できます。
+
+```typescript
+const historyTutorAgent = new Agent({
+  name: 'History Tutor',
+  instructions:
+    'You provide assistance with historical queries. Explain important events and context clearly.',
+});
+
+const mathTutorAgent = new Agent({
+  name: 'Math Tutor',
+  instructions:
+    'You provide help with math problems. Explain your reasoning at each step and include examples',
+});
+```
+
+## ハンドオフの定義
+
+複数のエージェントをオーケストレーションするために、エージェントに `handoffs` を定義できます。これにより、実行中に自動的に次のエージェントへ会話を引き継げるようになります。
+
+```typescript
+// Using the Agent.create method to ensures type safety for the final output
+const triageAgent = Agent.create({
+  name: 'Triage Agent',
+  instructions:
+    "You determine which agent to use based on the user's homework question",
+  handoffs: [historyTutorAgent, mathTutorAgent],
+});
+```
+
+実行後、result の `finalAgent` プロパティを確認すると、最終応答を生成したエージェントがわかります。
+
+## エージェントオーケストレーションの実行
+
+Runner は各エージェントの実行、ハンドオフ、ツール実行を処理します。
+
+```typescript
+import { run } from '@openai/agents';
+
+async function main() {
+  const result = await run(triageAgent, 'What is the capital of France?');
+  console.log(result.finalOutput);
+}
+
+main().catch((err) => console.error(err));
+```
+
+## まとめ
+
+すべてを一つにまとめた完全な例を示します。`index.js` に貼り付けて実行してください。
+
+<Code lang="typescript" code={quickstartExample} title="Quickstart" />
+
+## トレースの閲覧
+
+Agents SDK はトレースを自動生成します。これにより、エージェントがどのように動作したか、どのツールを呼び出したか、どのエージェントにハンドオフしたかを確認できます。
+
+エージェントの実行内容を確認するには、[OpenAI ダッシュボードの Trace ビューア](https://platform.openai.com/traces)にアクセスしてください。
+
+## 次のステップ
+
+より複雑なエージェントフローの構築方法を学びましょう:
+
+- [エージェント](/ja/guides/agents) の設定について学ぶ
+- [エージェントの実行](/ja/guides/running-agents) について学ぶ
+- [ツール](/ja/guides/tools)、[ガードレール](/ja/guides/guardrails)、[モデル](/ja/guides/models) について学ぶ

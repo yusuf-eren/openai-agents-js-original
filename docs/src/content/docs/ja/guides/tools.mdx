@@ -1,0 +1,104 @@
+---
+title: ツール
+description: Provide your agents with capabilities via hosted tools or custom function tools
+---
+
+import { Code } from '@astrojs/starlight/components';
+import toolsFunctionExample from '../../../../../../examples/docs/tools/functionTools.ts?raw';
+import toolsHostedToolsExample from '../../../../../../examples/docs/tools/hostedTools.ts?raw';
+import nonStrictSchemaTools from '../../../../../../examples/docs/tools/nonStrictSchemaTools.ts?raw';
+import agentsAsToolsExample from '../../../../../../examples/docs/tools/agentsAsTools.ts?raw';
+
+ツールを使うと Agent は **アクションを実行** できます。たとえばデータ取得、外部 API 呼び出し、コード実行、さらにはコンピュータ操作などです。JavaScript/TypeScript SDK は次の 3 つのカテゴリーをサポートします。
+
+1. **組み込みツール（Hosted）** – モデルと同じ OpenAI サーバー上で動作します。 _(web search, file search, computer use)_
+2. **関数ツール** – 任意のローカル関数を JSON スキーマでラップし、LLM から呼び出せるようにします。
+3. **エージェントをツールとして使用** – エージェント全体を呼び出し可能なツールとして公開します。
+
+---
+
+## 1. 組み込みツール（Hosted）
+
+`OpenAIResponsesModel` を使用する際、以下の組み込みツールを追加できます。
+
+| ツール                  | Type string          | 目的                                    |
+| ----------------------- | -------------------- | --------------------------------------- |
+| Web search              | `'web_search'`       | インターネット検索                      |
+| File / retrieval search | `'file_search'`      | OpenAI がホストするベクトルストアの検索 |
+| Computer use            | `'computer'`         | GUI 操作の自動化                        |
+| Code Interpreter        | `'code_interpreter'` | サンドボックス環境でのコード実行        |
+| Image generation        | `'image_generation'` | テキストを元に画像を生成                |
+
+<Code lang="typescript" code={toolsHostedToolsExample} title="Hosted tools" />
+
+各ツールのパラメーターは OpenAI Responses API と完全に一致します。`rankingOptions` やセマンティックフィルターなどの高度なオプションについては公式ドキュメントを参照してください。
+
+---
+
+## 2. 関数ツール
+
+`tool()` ヘルパーを使えば **あらゆる** 関数をツール化できます。
+
+<Code
+  lang="typescript"
+  code={toolsFunctionExample}
+  title="Function tool with Zod parameters"
+/>
+
+### オプションリファレンス
+
+| フィールド      | 必須 | 説明                                                                                                                           |
+| --------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `name`          | No   | 省略時は関数名（例: `get_weather`）が使用されます                                                                              |
+| `description`   | Yes  | LLM に表示される人間が読めるわかりやすい説明                                                                                   |
+| `parameters`    | Yes  | Zod スキーマまたは元 JSON スキーマオブジェクト。Zod を使うと自動的に **strict** モードが有効になります                         |
+| `strict`        | No   | `true`（デフォルト）の場合、引数が検証に失敗すると SDK はモデルエラーを返します。曖昧な入力を許容するには `false` に設定します |
+| `execute`       | Yes  | `(args, context) => string \| Promise<string>` – ビジネスロジック。第 2 引数は任意で `RunContext`                              |
+| `errorFunction` | No   | 内部エラーをユーザー向け文字列に変換するカスタムハンドラー `(context, error) => string`                                        |
+
+### 非 strict JSON-schema ツール
+
+不完全または無効な入力を _推測_ させたい場合は、strict モードを無効にして元 JSON スキーマを使用できます。
+
+<Code
+  lang="typescript"
+  code={nonStrictSchemaTools}
+  title="Non-strict JSON schema tools"
+/>
+
+---
+
+## 3. ツールとしてのエージェント
+
+会話を完全に引き渡すのではなく、別のエージェントを _補助_ として使いたい場合は `agent.asTool()` を利用します。
+
+<Code lang="typescript" code={agentsAsToolsExample} title="Agents as tools" />
+
+内部では SDK が以下を行います。
+
+- `input` パラメーター 1 つの関数ツールを生成
+- ツール呼び出し時にサブエージェントをその入力で実行
+- 最後のメッセージ、または `customOutputExtractor` が抽出した出力を返却
+
+---
+
+## ツール使用時の挙動
+
+モデルにツールを必ず使用させるタイミング・方法の制御（`tool_choice`, `toolUseBehavior` など）については [エージェント](/ja/guides/agents#forcing-tool-use) を参照してください。
+
+---
+
+## ベストプラクティス
+
+- **短く明確な説明** – ツールが _何をするか_ と _いつ使うべきか_ を記述する
+- **入力を検証** – 可能な限り Zod スキーマで厳密な JSON 検証を行う
+- **エラーハンドラーで副作用を避ける** – `errorFunction` は有用な文字列を返すだけにし、throw しない
+- **ツールは単機能に** – 小さく再利用可能なツールの方がモデルの推論品質が向上する
+
+---
+
+## 次のステップ
+
+- [ツール使用の強制](/ja/guides/agents#forcing-tool-use) について学ぶ
+- [ガードレール](/ja/guides/guardrails) を追加してツールの入力・出力を検証
+- [`tool()`](/openai/agents/functions/tool) と各種組み込みツール型の TypeDoc リファレンスを確認

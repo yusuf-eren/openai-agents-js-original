@@ -1,0 +1,89 @@
+---
+title: エージェントの実行結果
+description: Learn how to access the results and output from your agent run
+---
+
+import { Code } from '@astrojs/starlight/components';
+import handoffFinalOutputTypes from '../../../../../../examples/docs/results/handoffFinalOutputTypes.ts?raw';
+import historyLoop from '../../../../../../examples/docs/results/historyLoop.ts?raw';
+
+[エージェントの実行](/ja/guides/running-agents) を行うと、結果として次のいずれかを受け取ります。
+
+- `stream: true` を付けずに `run` を呼び出した場合 — [`RunResult`](/openai/agents/classes/runresult)
+- `stream: true` を付けて `run` を呼び出した場合 — [`StreamedRunResult`](/openai/agents/classes/streamedrunresult)。ストリーミングの詳細は [ストリーミング](/ja/guides/streaming) も参照してください。
+
+## 最終出力
+
+`finalOutput` プロパティには、最後に実行されたエージェントの最終出力が入ります。型は次のいずれかです。
+
+- `string` — `outputType` が定義されていないエージェントのデフォルト
+- `unknown` — エージェントが JSON スキーマを出力タイプとして定義している場合。JSON はパースされますが、型の確認は手動で行う必要があります
+- `z.infer<outputType>` — エージェントが Zod スキーマを出力タイプとして定義している場合。出力は自動的にこのスキーマでパースされます
+- `undefined` — エージェントが出力を生成しなかった場合（たとえば途中で停止した場合）
+
+複数の異なる出力タイプでハンドオフを使用する場合は、`new Agent()` コンストラクターではなく `Agent.create()` メソッドでエージェントを作成してください。
+
+これにより、SDK はすべてのハンドオフでの出力タイプを推論し、`finalOutput` プロパティにユニオン型を提供します。
+
+例:
+
+<Code
+  lang="typescript"
+  code={handoffFinalOutputTypes}
+  title="Handoff final output types"
+/>
+
+## 次ターンへの入力
+
+次ターン用の入力には 2 通りの取得方法があります。
+
+- `result.history` — 入力とエージェントの出力の両方をコピーして保持します
+- `result.output` — エージェント実行全体の出力を保持します
+
+チャットのようなユースケースでは、`history` を使うと完全な履歴を簡単に保持できます。
+
+<Code lang="typescript" code={historyLoop} title="History loop" />
+
+## 最後に実行したエージェント
+
+`lastAgent` プロパティには最後に実行されたエージェントが入ります。たとえばフロントラインのトリアージ エージェントが言語別エージェントへハンドオフする場合、`lastAgent` を保存しておき、次回ユーザーからメッセージが来た際に再利用できます。
+
+ストリーミング モードでは、現在実行中のエージェントを示す `currentAgent` プロパティを参照するのが便利なこともあります。
+
+## 新規アイテム
+
+`newItems` プロパティには実行中に生成された新しいアイテムが入ります。アイテムは [`RunItem`](/openai/agents/type-aliases/runitem) で、LLM が生成した元アイテムをラップしています。これにより、LLM の出力に加え、そのイベントがどのエージェントに紐づくかを取得できます。
+
+- [`RunMessageOutputItem`](/openai/agents/classes/runmessageoutputitem) — LLM からのメッセージ。`raw` は生成されたメッセージ
+- [`RunHandoffCallItem`](/openai/agents/classes/runhandoffcallitem) — LLM がハンドオフ ツールを呼び出したことを示します。`raw` はツール呼び出しアイテム
+- [`RunHandoffOutputItem`](/openai/agents/classes/runhandoffoutputitem) — ハンドオフが発生したことを示します。`raw` はツールのレスポンス。ソース／ターゲット エージェントにもアクセス可能
+- [`RunToolCallItem`](/openai/agents/classes/runtoolcallitem) — LLM がツールを呼び出したことを示します
+- [`RunToolCallOutputItem`](/openai/agents/classes/runtoolcalloutputitem) — ツールが呼び出されたことを示します。`raw` はツールのレスポンス。ツール出力にもアクセス可能
+- [`RunReasoningItem`](/openai/agents/classes/runreasoningitem) — LLM からの推論アイテム。`raw` は生成された推論
+- [`RunToolApprovalItem`](/openai/agents/classes/runtoolapprovalitem) — LLM がツール呼び出しの承認を要求したことを示します。`raw` はツール呼び出しアイテム
+
+## 状態
+
+`state` プロパティには実行の状態が入ります。`result` に付随する多くの情報は `state` から導出されていますが、`state` はシリアライズ／デシリアライズ可能で、[エラーからの復旧](/ja/guides/running-agents#exceptions) や [`割り込み`](#interruptions) に対処するために、後続の `run` 呼び出しの入力として利用できます。
+
+## 割り込み
+
+エージェントで `needsApproval` を使用している場合、`run` 中に処理すべき `interruptions` が発生することがあります。その場合、`interruptions` は割り込みを引き起こした `ToolApprovalItem` の配列になります。割り込みの扱いについては [人間の介入（HITL）](/ja/guides/human-in-the-loop) を参照してください。
+
+## その他の情報
+
+### 元レスポンス
+
+`rawResponses` プロパティには、エージェント実行中にモデルが生成した元の LLM レスポンスが入ります。
+
+### 最後のレスポンス ID
+
+`lastResponseId` プロパティには、エージェント実行中にモデルが最後に生成したレスポンスの ID が入ります。
+
+### ガードレール結果
+
+`inputGuardrailResults` と `outputGuardrailResults` には、ガードレールの結果が入ります（存在する場合）。ログや保存に役立つ情報が含まれていることがあるため、これらを利用できます。
+
+### 元入力
+
+`input` プロパティには `run` メソッドに渡した元の入力が入ります。通常は不要ですが、必要な場合のために提供しています。

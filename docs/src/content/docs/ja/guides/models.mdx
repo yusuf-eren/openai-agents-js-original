@@ -1,0 +1,114 @@
+---
+title: モデル
+description: Choose and configure language models for your agents
+---
+
+import { Code } from '@astrojs/starlight/components';
+import modelCustomProviderExample from '../../../../../../examples/docs/models/customProviders.ts?raw';
+import setDefaultOpenAIKeyExample from '../../../../../../examples/docs/config/setDefaultOpenAIKey.ts?raw';
+import modelSettingsExample from '../../../../../../examples/docs/models/modelSettings.ts?raw';
+import agentWithModelExample from '../../../../../../examples/docs/models/agentWithModel.ts?raw';
+import runnerWithModelExample from '../../../../../../examples/docs/models/runnerWithModel.ts?raw';
+import setTracingExportApiKeyExample from '../../../../../../examples/docs/config/setTracingExportApiKey.ts?raw';
+
+最終的にすべての エージェント は LLM を呼び出します。SDK はモデルを次の 2 つの軽量インターフェースの背後に抽象化します:
+
+- [`Model`](/openai/agents/interfaces/model) – 特定 API への _1 回_ のリクエスト方法を知っています
+- [`ModelProvider`](/openai/agents/interfaces/modelprovider) – 人間が読みやすいモデル **名** (例: `'gpt-4o'`) を `Model` インスタンスへ解決します
+
+日常的にはモデル **名** と、時折 `ModelSettings` のみを扱います。
+
+<Code
+  lang="typescript"
+  code={agentWithModelExample}
+  title="エージェントごとにモデルを指定"
+/>
+
+---
+
+## OpenAI プロバイダー
+
+デフォルトの `ModelProvider` は OpenAI API を使って名前を解決します。2 つの異なるエンドポイントをサポートしています:
+
+| API              | 使用用途                                                              | `setOpenAIAPI()` の呼び出し                |
+| ---------------- | --------------------------------------------------------------------- | ------------------------------------------ |
+| Chat Completions | 標準的なチャット & 関数呼び出し                                       | `setOpenAIAPI('chat_completions')`         |
+| Responses        | ストリーミングを第一とした新しい生成 API (ツール呼び出し、柔軟な出力) | `setOpenAIAPI('responses')` _(デフォルト)_ |
+
+### 認証
+
+<Code
+  lang="typescript"
+  code={setDefaultOpenAIKeyExample}
+  title="デフォルト OpenAI キーを設定"
+/>
+
+カスタムのネットワーク設定が必要な場合は、`setDefaultOpenAIClient(client)` で独自の `OpenAI` クライアントを差し込むこともできます。
+
+### デフォルトモデル
+
+OpenAI プロバイダーのデフォルトは `gpt-4o` です。エージェント単位またはグローバルに上書きできます:
+
+<Code
+  lang="typescript"
+  code={runnerWithModelExample}
+  title="デフォルトモデルを設定"
+/>
+
+---
+
+## ModelSettings
+
+`ModelSettings` は OpenAI のパラメーターを反映しつつ、プロバイダー非依存です。
+
+| フィールド          | 型                                         | メモ                                                            |
+| ------------------- | ------------------------------------------ | --------------------------------------------------------------- |
+| `temperature`       | `number`                                   | 創造性と決定論のバランス                                        |
+| `topP`              | `number`                                   | ニュークリアスサンプリング                                      |
+| `frequencyPenalty`  | `number`                                   | 繰り返しトークンのペナルティ                                    |
+| `presencePenalty`   | `number`                                   | 新しいトークンを促進                                            |
+| `toolChoice`        | `'auto' \| 'required' \| 'none' \| string` | [ツールの使用を強制する](/ja/guides/agents.md#forcing-tool-use) |
+| `parallelToolCalls` | `boolean`                                  | 対応している場合に並列関数呼び出しを許可                        |
+| `truncation`        | `'auto' \| 'disabled'`                     | トークン切り詰め戦略                                            |
+| `maxTokens`         | `number`                                   | 応答内の最大トークン数                                          |
+| `store`             | `boolean`                                  | 応答を永続化し、取得 / RAG ワークフローで利用                   |
+
+設定はどちらのレベルにも添付できます:
+
+<Code lang="typescript" code={modelSettingsExample} title="モデル設定" />
+
+`Runner` レベルの設定は、競合するエージェント単位の設定を上書きします。
+
+---
+
+## カスタムモデルプロバイダー
+
+独自プロバイダーの実装は簡単です。`ModelProvider` と `Model` を実装し、`Runner` コンストラクターに渡します:
+
+<Code
+  lang="typescript"
+  code={modelCustomProviderExample}
+  title="最小限のカスタムプロバイダー"
+/>
+
+---
+
+## トレーシングエクスポーター
+
+OpenAI プロバイダー使用時に API キーを渡せば、自動トレースエクスポートをオプトインできます:
+
+<Code
+  lang="typescript"
+  code={setTracingExportApiKeyExample}
+  title="トレーシングエクスポーター"
+/>
+
+これによりトレースが [OpenAI ダッシュボード](https://platform.openai.com/traces) へ送信され、ワークフローの完全な実行グラフを確認できます。
+
+---
+
+## 次のステップ
+
+- [エージェントの実行](/ja/guides/running-agents) を確認
+- [ツール](/ja/guides/tools) でモデルにスーパーパワーを付与
+- 必要に応じて [ガードレール](/ja/guides/guardrails) や [トレーシング](/ja/guides/tracing) を追加

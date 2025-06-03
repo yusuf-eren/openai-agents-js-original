@@ -1,0 +1,164 @@
+---
+title: 音声エージェントの構築
+description: Learn how to build voice agents using the OpenAI Agents SDK, what features are available, how to architecture your application, and more.
+---
+
+import { Steps, Aside, Code } from '@astrojs/starlight/components';
+import createAgentExample from '../../../../../../../examples/docs/voice-agents/createAgent.ts?raw';
+import multiAgentsExample from '../../../../../../../examples/docs/voice-agents/multiAgents.ts?raw';
+import createSessionExample from '../../../../../../../examples/docs/voice-agents/createSession.ts?raw';
+import configureSessionExample from '../../../../../../../examples/docs/voice-agents/configureSession.ts?raw';
+import handleAudioExample from '../../../../../../../examples/docs/voice-agents/handleAudio.ts?raw';
+import defineToolExample from '../../../../../../../examples/docs/voice-agents/defineTool.ts?raw';
+import toolApprovalEventExample from '../../../../../../../examples/docs/voice-agents/toolApprovalEvent.ts?raw';
+import guardrailsExample from '../../../../../../../examples/docs/voice-agents/guardrails.ts?raw';
+import guardrailSettingsExample from '../../../../../../../examples/docs/voice-agents/guardrailSettings.ts?raw';
+import audioInterruptedExample from '../../../../../../../examples/docs/voice-agents/audioInterrupted.ts?raw';
+import sessionInterruptExample from '../../../../../../../examples/docs/voice-agents/sessionInterrupt.ts?raw';
+import sessionHistoryExample from '../../../../../../../examples/docs/voice-agents/sessionHistory.ts?raw';
+import historyUpdatedExample from '../../../../../../../examples/docs/voice-agents/historyUpdated.ts?raw';
+import updateHistoryExample from '../../../../../../../examples/docs/voice-agents/updateHistory.ts?raw';
+import customWebRTCTransportExample from '../../../../../../../examples/docs/voice-agents/customWebRTCTransport.ts?raw';
+import websocketSessionExample from '../../../../../../../examples/docs/voice-agents/websocketSession.ts?raw';
+import transportEventsExample from '../../../../../../../examples/docs/voice-agents/transportEvents.ts?raw';
+import thinClientExample from '../../../../../../../examples/docs/voice-agents/thinClient.ts?raw';
+import toolHistoryExample from '../../../../../../../examples/docs/voice-agents/toolHistory.ts?raw';
+import sendMessageExample from '../../../../../../../examples/docs/voice-agents/sendMessage.ts?raw';
+import serverAgentExample from '../../../../../../../examples/docs/voice-agents/serverAgent.ts?raw';
+import delegationAgentExample from '../../../../../../../examples/docs/voice-agents/delegationAgent.ts?raw';
+import turnDetectionExample from '../../../../../../../examples/docs/voice-agents/turnDetection.ts?raw';
+
+## オーディオ処理
+
+デフォルトの `OpenAIRealtimeWebRTC` など一部のトランスポートレイヤーは、オーディオの入出力を自動で処理します。  
+`OpenAIRealtimeWebSocket` のようなその他のトランスポートを使用する場合は、セッションのオーディオを自前で処理する必要があります。
+
+<Code lang="typescript" code={handleAudioExample} />
+
+## セッション設定
+
+[`RealtimeSession`](/openai/agents-realtime/classes/realtimesession/) を生成するとき、または `connect(...)` を呼び出すときに追加オプションを渡すことでセッションを設定できます。
+
+<Code lang="typescript" code={configureSessionExample} />
+
+これらのトランスポートレイヤーでは、[session](https://platform.openai.com/docs/api-reference/realtime-client-events/session/update) と一致する任意のパラメーターを渡せます。
+
+[RealtimeSessionConfig](/openai/agents-realtime/type-aliases/realtimesessionconfig/) に対応するパラメーターがまだ存在しない場合は `providerData` を使用してください。`providerData` に渡した内容は `session` オブジェクトの一部としてそのまま送信されます。
+
+## ハンドオフ
+
+通常のエージェントと同様に、ハンドオフを利用してエージェントを複数のエージェントに分割し、相互にオーケストレーションすることでパフォーマンスを向上させたり、問題のスコープを絞り込んだりできます。
+
+<Code lang="typescript" code={multiAgentsExample} />
+
+Realtime Agents ではハンドオフの挙動が通常のエージェントと少し異なります。ハンドオフが実行されると、進行中のセッションは新しいエージェント構成で更新されます。そのためエージェントは会話履歴に自動的にアクセスでき、入力フィルターは現在適用されません。
+
+さらに、ハンドオフの一部として `voice` や `model` を変更することはできません。また、接続できるのは他の Realtime Agent のみです。`o4-mini` のような推論モデルを使用したい場合は、[ツールによる委任](#delegation-through-tools) をご利用ください。
+
+## ツール
+
+通常のエージェントと同様に、Realtime Agents でもツールを呼び出してアクションを実行できます。ツールは通常のエージェントと同じ `tool()` 関数で定義します。
+
+<Code lang="typescript" code={defineToolExample} />
+
+Realtime Agents で使用できるのは関数ツールのみで、これらのツールは Realtime Session と同じ場所で実行されます。つまり、ブラウザで Realtime Session を実行している場合はツールもブラウザで実行されます。より機密性の高い処理が必要な場合は、ツール内でバックエンドサーバーへの HTTP リクエストを送信してください。
+
+ツール実行中はエージェントが新しい user からのリクエストを処理できません。エージェントに「これからツールを実行します」とアナウンスさせたり、時間稼ぎのフレーズを言わせたりすると体験を向上できます。
+
+### 会話履歴へのアクセス
+
+エージェントがツールを呼び出す際に渡された引数に加え、Realtime Session が管理している現在の会話履歴のスナップショットにもアクセスできます。会話の状態に基づいてより複雑なアクションを行う場合や、[ツールによる委任](#delegation-through-tools) を計画している場合に便利です。
+
+<Code lang="typescript" code={toolHistoryExample} />
+
+<Aside type="note">
+  渡される履歴はツール呼び出し時点のスナップショットです。ユーザーが最後に話した内容の文字起こしがまだ利用できない場合があります。
+</Aside>
+
+### ツール実行前の承認
+
+`needsApproval: true` でツールを定義すると、ツール実行前に `tool_approval_requested` イベントが発火します。
+
+このイベントを監視して、ツール呼び出しを承認または拒否する UI をユーザーに提示できます。
+
+<Code lang="typescript" code={toolApprovalEventExample} />
+
+<Aside type="note">
+  ボイスエージェントがツール呼び出しの承認待ちの間、エージェントは新しいリクエストを処理できません。
+</Aside>
+
+## ガードレール
+
+ガードレールは、エージェントの発話がルール違反をしたかどうかを監視し、違反があれば直ちにレスポンスを打ち切る仕組みです。チェックはエージェントのレスポンスの文字起こしに基づいて行われるため、モデルのテキスト出力が有効である必要があります（デフォルトで有効）。
+
+ガードレールはモデルレスポンスが返されると同時に非同期で実行されます。たとえば「特定の禁止ワードを含む」など、あらかじめ定義した分類トリガーに基づきレスポンスを打ち切れます。
+
+ガードレールが作動するとセッションは `guardrail_tripped` イベントを発火します。
+
+<Code lang="typescript" code={guardrailsExample} />
+
+デフォルトでは、ガードレールは 100 文字ごと、またはレスポンス生成が完了したときに実行されます。読み上げには通常それ以上の時間がかかるため、ほとんどの場合ユーザーが聞く前に違反を検知できます。
+
+この挙動を変更したい場合は、`outputGuardrailSettings` オブジェクトをセッションに渡してください。
+
+<Code lang="typescript" code={guardrailSettingsExample} />
+
+## 発話検出 / 音声アクティビティ検出
+
+Realtime Session は、組み込みの [Realtime API の音声アクティビティ検出モード](https://platform.openai.com/docs/guides/realtime-vad) を使用してユーザーの発話を自動検出し、ターンを開始します。
+
+`turnDetection` オブジェクトをセッションに渡すことで、音声アクティビティ検出モードを変更できます。
+
+<Code lang="typescript" code={turnDetectionExample} />
+
+ターン検出設定を調整すると、不要な割り込みや無音への対応を最適化できます。詳細は [Realtime API ドキュメント](https://platform.openai.com/docs/guides/realtime-vad) を参照してください。
+
+## 割り込み
+
+組み込みの音声アクティビティ検出を使用している場合、エージェントが話している最中にユーザーが話し始めると、自動的に割り込みが検知され、コンテキストが更新されます。また `audio_interrupted` イベントも発火します。これは（ WebSocket 接続時のみ）すべてのオーディオ再生を即時停止する際に利用できます。
+
+<Code lang="typescript" code={audioInterruptedExample} />
+
+UI に「ストップ」ボタンを用意するなど手動で割り込みたい場合は、`interrupt()` を手動で呼び出します。
+
+<Code lang="typescript" code={sessionInterruptExample} />
+
+いずれの場合も、Realtime Session はエージェントの生成を中断し、ユーザーへ話した内容を切り捨てて履歴を更新します。
+
+WebRTC でエージェントに接続している場合は、オーディオ出力もクリアされます。WebSocket を使用している場合は、キューに入っている音声再生を停止する処理を自前で行ってください。
+
+## テキスト入力
+
+エージェントにテキスト入力を送信したい場合は、`RealtimeSession` の `sendMessage` メソッドを使用します。
+
+ユーザーが音声とテキストの両方でエージェントと対話できるようにしたり、会話へ追加のコンテキストを提供したりする際に便利です。
+
+<Code lang="typescript" code={sendMessageExample} />
+
+## 会話履歴管理
+
+`RealtimeSession` は `history` プロパティで会話履歴を自動管理します。
+
+これを利用して履歴をユーザーに表示したり、追加処理を行ったりできます。会話中に履歴は常に変化するため、`history_updated` イベントを監視してください。
+
+履歴からメッセージを削除したり文字起こしを更新したりしたい場合は、`updateHistory` メソッドを使用します。
+
+<Code lang="typescript" code={updateHistoryExample} />
+
+### 制限事項
+
+1. 既存の関数ツール呼び出しを後から更新・変更することはできません
+2. 履歴にテキスト出力を表示するには、文字起こしとテキストモダリティが有効である必要があります
+3. 割り込みにより切り詰められたレスポンスには文字起こしがありません
+
+## ツールによる委任
+
+![Delegation through tools](https://cdn.openai.com/API/docs/diagram-speech-to-speech-agent-tools.png)
+
+会話履歴とツール呼び出しを組み合わせることで、より複雑な処理を別のバックエンドエージェントに委任し、その結果を user に返すことができます。
+
+<Code lang="typescript" code={delegationAgentExample} />
+
+以下のコードはサーバー側で実行されます。この例では Next.js の server actions を利用しています。
+
+<Code lang="typescript" code={serverAgentExample} />
