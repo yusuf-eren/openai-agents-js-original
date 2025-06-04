@@ -2,6 +2,7 @@ import { Model, ModelProvider } from '@openai/agents-core';
 import OpenAI from 'openai';
 import {
   DEFAULT_OPENAI_MODEL,
+  getDefaultOpenAIClient,
   getDefaultOpenAIKey,
   shouldUseResponsesByDefault,
 } from './defaults';
@@ -39,7 +40,6 @@ export class OpenAIProvider implements ModelProvider {
       }
       this.#client = this.#options.openAIClient;
     }
-
     this.#useResponses = this.#options.useResponses;
   }
 
@@ -48,15 +48,19 @@ export class OpenAIProvider implements ModelProvider {
    * never actually use the client.
    */
   #getClient(): OpenAI {
+    // If the constructor does not accept the OpenAI client,
     if (!this.#client) {
-      this.#client = new OpenAI({
-        apiKey: this.#options.apiKey ?? getDefaultOpenAIKey(),
-        baseURL: this.#options.baseURL,
-        organization: this.#options.organization,
-        project: this.#options.project,
-      });
+      this.#client =
+        // this provider checks if there is the default client first,
+        getDefaultOpenAIClient() ??
+        // and then manually creates a new one.
+        new OpenAI({
+          apiKey: this.#options.apiKey ?? getDefaultOpenAIKey(),
+          baseURL: this.#options.baseURL,
+          organization: this.#options.organization,
+          project: this.#options.project,
+        });
     }
-
     return this.#client;
   }
 
