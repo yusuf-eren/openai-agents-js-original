@@ -14,7 +14,13 @@ import {
 } from './items';
 import logger, { Logger } from './logger';
 import { ModelResponse, ModelSettings } from './model';
-import { ComputerTool, FunctionTool, Tool, FunctionToolResult } from './tool';
+import {
+  ComputerTool,
+  FunctionTool,
+  Tool,
+  FunctionToolResult,
+  HostedMCPTool,
+} from './tool';
 import { AgentInputItem, UnknownContext } from './types';
 import { Runner } from './run';
 import { RunContext } from './runContext';
@@ -31,6 +37,7 @@ import * as protocol from './types/protocol';
 import { Computer } from './computer';
 import { RunState } from './runState';
 import { isZodObject } from './utils';
+import * as ProviderData from './types/providerData';
 
 type ToolRunHandoff = {
   toolCall: protocol.FunctionCallItem;
@@ -47,11 +54,17 @@ type ToolRunComputer = {
   computer: ComputerTool;
 };
 
+type ToolRunMCPApprovalRequest = {
+  requestItem: RunToolApprovalItem;
+  mcpTool: HostedMCPTool;
+};
+
 export type ProcessedResponse<TContext = UnknownContext> = {
   newItems: RunItem[];
   handoffs: ToolRunHandoff[];
   functions: ToolRunFunction<TContext>[];
   computerActions: ToolRunComputer[];
+  mcpApprovalRequests: ToolRunMCPApprovalRequest[];
   toolsUsed: string[];
   hasToolsOrApprovalsToRun(): boolean;
 };
@@ -69,12 +82,19 @@ export function processModelResponse<TContext>(
   const runHandoffs: ToolRunHandoff[] = [];
   const runFunctions: ToolRunFunction<TContext>[] = [];
   const runComputerActions: ToolRunComputer[] = [];
+  const runMCPApprovalRequests: ToolRunMCPApprovalRequest[] = [];
   const toolsUsed: string[] = [];
   const handoffMap = new Map(handoffs.map((h) => [h.toolName, h]));
   const functionMap = new Map(
     tools.filter((t) => t.type === 'function').map((t) => [t.name, t]),
   );
   const computerTool = tools.find((t) => t.type === 'computer');
+  const mcpToolMap = new Map(
+    tools
+      .filter((t) => t.type === 'hosted_tool' && t.providerData?.type === 'mcp')
+      .map((t) => t as HostedMCPTool)
+      .map((t) => [t.providerData.server_label, t]),
+  );
 
   for (const output of modelResponse.output) {
     if (output.type === 'message') {
@@ -83,7 +103,51 @@ export function processModelResponse<TContext>(
       }
     } else if (output.type === 'hosted_tool_call') {
       items.push(new RunToolCallItem(output, agent));
-      toolsUsed.push(output.name);
+      const toolName = output.name;
+      toolsUsed.push(toolName);
+
+      if (
+        output.providerData?.type === 'mcp_approval_request' ||
+        output.name === 'mcp_approval_request'
+      ) {
+        // Hosted remote MCP server's approval process
+        const providerData =
+          output.providerData as ProviderData.HostedMCPApprovalRequest;
+
+        const mcpServerLabel = providerData.server_label;
+        const mcpServerTool = mcpToolMap.get(mcpServerLabel);
+        if (typeof mcpServerTool === 'undefined') {
+          const message = `MCP server (${mcpServerLabel}) not found in Agent (${agent.name})`;
+          addErrorToCurrentSpan({
+            message,
+            data: { mcp_server_label: mcpServerLabel },
+          });
+          throw new ModelBehaviorError(message);
+        }
+
+        // Do this approval later:
+        // We support both onApproval callback (like the Python SDK does) and HITL patterns.
+        const approvalItem = new RunToolApprovalItem(
+          {
+            type: 'hosted_tool_call',
+            // We must use this name to align with the name sent from the servers
+            name: providerData.name,
+            id: providerData.id,
+            status: 'in_progress',
+            providerData,
+          },
+          agent,
+        );
+        runMCPApprovalRequests.push({
+          requestItem: approvalItem,
+          mcpTool: mcpServerTool,
+        });
+        if (!mcpServerTool.providerData.on_approval) {
+          // When onApproval function exists, it confirms the approval right after this.
+          // Thus, this approval item must be appended only for the next turn interrpution patterns.
+          items.push(approvalItem);
+        }
+      }
     } else if (output.type === 'reasoning') {
       items.push(new RunReasoningItem(output, agent));
     } else if (output.type === 'computer_call') {
@@ -147,11 +211,13 @@ export function processModelResponse<TContext>(
     handoffs: runHandoffs,
     functions: runFunctions,
     computerActions: runComputerActions,
+    mcpApprovalRequests: runMCPApprovalRequests,
     toolsUsed: toolsUsed,
     hasToolsOrApprovalsToRun(): boolean {
       return (
         runHandoffs.length > 0 ||
         runFunctions.length > 0 ||
+        runMCPApprovalRequests.length > 0 ||
         runComputerActions.length > 0
       );
     },
@@ -236,20 +302,18 @@ export async function executeInterruptedToolsAndSideEffects<TContext>(
   runner: Runner,
   state: RunState<TContext, Agent<TContext, any>>,
 ): Promise<SingleStepResult> {
-  const preStepItems = originalPreStepItems.filter((item) => {
-    return !(item instanceof RunToolApprovalItem);
-  });
-
-  const approvalRequests = originalPreStepItems
-    .filter((item) => {
-      return item instanceof RunToolApprovalItem;
-    })
-    .map((item) => {
-      return item.rawItem.callId;
-    });
-
+  // call_ids for function tools
+  const functionCallIds = originalPreStepItems
+    .filter(
+      (item) =>
+        item instanceof RunToolApprovalItem &&
+        'callId' in item.rawItem &&
+        item.rawItem.type === 'function_call',
+    )
+    .map((item) => (item.rawItem as protocol.FunctionCallItem).callId);
+  // Run function tools that require approval after they get their approval results
   const functionToolRuns = processedResponse.functions.filter((run) => {
-    return approvalRequests.includes(run.toolCall.callId);
+    return functionCallIds.includes(run.toolCall.callId);
   });
 
   const functionResults = await executeFunctionToolCalls(
@@ -259,13 +323,58 @@ export async function executeInterruptedToolsAndSideEffects<TContext>(
     state,
   );
 
-  const newItems = functionResults.map((r) => r.runItem);
+  // Create the initial set of the output items
+  const newItems: RunItem[] = functionResults.map((r) => r.runItem);
+
+  // Run MCP tools that require approval after they get their approval results
+  const mcpApprovalRuns = processedResponse.mcpApprovalRequests.filter(
+    (run) => {
+      return (
+        run.requestItem.type === 'tool_approval_item' &&
+        run.requestItem.rawItem.type === 'hosted_tool_call' &&
+        run.requestItem.rawItem.providerData?.type === 'mcp_approval_request'
+      );
+    },
+  );
+  for (const run of mcpApprovalRuns) {
+    // the approval_request_id "mcpr_123..."
+    const approvalRequestId = run.requestItem.rawItem.id!;
+    const approved = state._context.isToolApproved({
+      // Since this item name must be the same with the one sent from Responses API server
+      toolName: run.requestItem.rawItem.name,
+      callId: approvalRequestId,
+    });
+    if (typeof approved !== 'undefined') {
+      const providerData: ProviderData.HostedMCPApprovalResponse = {
+        approve: approved,
+        approval_request_id: approvalRequestId,
+        reason: undefined,
+      };
+      // Tell Responses API server the approval result in the next turn
+      newItems.push(
+        new RunToolCallItem(
+          {
+            type: 'hosted_tool_call',
+            name: 'mcp_approval_response',
+            providerData,
+          },
+          agent as Agent<unknown, 'text'>,
+        ),
+      );
+    }
+  }
 
   const checkToolOutput = await checkForFinalOutputFromTools(
     agent,
     functionResults,
     state,
   );
+
+  // Exclude the tool approval items, which should not be sent to Responses API,
+  // from the SingleStepResult's preStepItems
+  const preStepItems = originalPreStepItems.filter((item) => {
+    return !(item instanceof RunToolApprovalItem);
+  });
 
   if (checkToolOutput.isFinalOutput) {
     runner.emit(
@@ -343,6 +452,58 @@ export async function executeToolsAndSideEffects<TContext>(
 
   newItems = newItems.concat(functionResults.map((r) => r.runItem));
   newItems = newItems.concat(computerResults);
+
+  // run hosted MCP approval requests
+  if (processedResponse.mcpApprovalRequests.length > 0) {
+    for (const approvalRequest of processedResponse.mcpApprovalRequests) {
+      const toolData = approvalRequest.mcpTool
+        .providerData as ProviderData.HostedMCPTool<TContext>;
+      const requestData = approvalRequest.requestItem.rawItem
+        .providerData as ProviderData.HostedMCPApprovalRequest;
+      if (toolData.on_approval) {
+        // synchronously handle the approval process here
+        const approvalResult = await toolData.on_approval(
+          state._context,
+          approvalRequest.requestItem,
+        );
+        const approvalResponseData: ProviderData.HostedMCPApprovalResponse = {
+          approve: approvalResult.approve,
+          approval_request_id: requestData.id,
+          reason: approvalResult.reason,
+        };
+        newItems.push(
+          new RunToolCallItem(
+            {
+              type: 'hosted_tool_call',
+              name: 'mcp_approval_response',
+              providerData: approvalResponseData,
+            },
+            agent as Agent<unknown, 'text'>,
+          ),
+        );
+      } else {
+        // receive a user's approval on the next turn
+        newItems.push(approvalRequest.requestItem);
+        const approvalItem = {
+          type: 'hosted_mcp_tool_approval' as const,
+          tool: approvalRequest.mcpTool,
+          runItem: new RunToolApprovalItem(
+            {
+              type: 'hosted_tool_call',
+              name: requestData.name,
+              id: requestData.id,
+              arguments: requestData.arguments,
+              status: 'in_progress',
+              providerData: requestData,
+            },
+            agent,
+          ),
+        };
+        functionResults.push(approvalItem);
+        // newItems.push(approvalItem.runItem);
+      }
+    }
+  }
 
   // process handoffs
   if (processedResponse.handoffs.length > 0) {
@@ -521,6 +682,7 @@ export async function executeFunctionToolCalls<TContext = UnknownContext>(
       });
 
       if (approval === false) {
+        // rejected
         return withFunctionSpan(
           async (span) => {
             const response = 'Tool execution was not approved.';
@@ -554,6 +716,7 @@ export async function executeFunctionToolCalls<TContext = UnknownContext>(
       }
 
       if (approval !== true) {
+        // this approval process needs to be done in the next turn
         return {
           type: 'function_approval' as const,
           tool: toolRun.tool,

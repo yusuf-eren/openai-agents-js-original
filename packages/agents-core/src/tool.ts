@@ -16,6 +16,7 @@ import logger from './logger';
 import { getCurrentSpan } from './tracing';
 import { RunToolApprovalItem, RunToolCallOutputItem } from './items';
 import { toSmartString } from './utils/smartString';
+import * as ProviderData from './types/providerData';
 
 /**
  * A function that determines if a tool call should be approved.
@@ -110,6 +111,70 @@ export function computerTool(
   };
 }
 
+export type HostedMCPApprovalFunction<Context = UnknownContext> = (
+  context: RunContext<Context>,
+  data: RunToolApprovalItem,
+) => Promise<{ approve: boolean; reason?: string }>;
+
+/**
+ * A hosted MCP tool that lets the model call a remote MCP server directly
+ * without a round trip back to your code.
+ */
+export type HostedMCPTool<Context = UnknownContext> = HostedTool & {
+  name: 'hosted_mcp';
+  providerData: ProviderData.HostedMCPTool<Context>;
+};
+
+/**
+ * Creates a hosted MCP tool definition.
+ *
+ * @param serverLabel - The label identifying the MCP server.
+ * @param serverUrl - The URL of the MCP server.
+ * @param requireApproval - Whether tool calls require approval.
+ */
+export function hostedMcpTool<Context = UnknownContext>(
+  options: {
+    serverLabel: string;
+    serverUrl: string;
+  } & (
+    | { requireApproval: never }
+    | { requireApproval: 'never' }
+    | {
+        requireApproval:
+          | 'always'
+          | {
+              never?: { toolNames: string[] };
+              always?: { toolNames: string[] };
+            };
+        onApproval?: HostedMCPApprovalFunction<Context>;
+      }
+  ),
+): HostedMCPTool<Context> {
+  const providerData: ProviderData.HostedMCPTool<Context> =
+    options.requireApproval === 'never'
+      ? {
+          type: 'mcp',
+          server_label: options.serverLabel,
+          server_url: options.serverUrl,
+          require_approval: 'never',
+        }
+      : {
+          type: 'mcp',
+          server_label: options.serverLabel,
+          server_url: options.serverUrl,
+          require_approval:
+            typeof options.requireApproval === 'string'
+              ? options.requireApproval
+              : buildRequireApproval(options.requireApproval),
+          on_approval: options.onApproval,
+        };
+  return {
+    type: 'hosted_tool',
+    name: 'hosted_mcp',
+    providerData,
+  };
+}
+
 /**
  * A built-in hosted tool that will be executed directly by the model during the request and won't result in local code executions.
  * Examples of these are `web_search_call` or `file_search_call`.
@@ -173,6 +238,20 @@ export type FunctionToolResult<
        * The tool that is requiring to be approved.
        */
       tool: FunctionTool<Context, TParameters, Result>;
+      /**
+       * The item representing the tool call that is requiring approval.
+       */
+      runItem: RunToolApprovalItem;
+    }
+  | {
+      /**
+       * Indiciates that the tool requires approval before it can be called.
+       */
+      type: 'hosted_mcp_tool_approval';
+      /**
+       * The tool that is requiring to be approved.
+       */
+      tool: HostedMCPTool<Context>;
       /**
        * The item representing the tool call that is requiring approval.
        */
@@ -498,4 +577,21 @@ export function tool<
     invoke,
     needsApproval,
   };
+}
+
+function buildRequireApproval(requireApproval: {
+  never?: { toolNames: string[] };
+  always?: { toolNames: string[] };
+}): { never?: { tool_names: string[] }; always?: { tool_names: string[] } } {
+  const result: {
+    never?: { tool_names: string[] };
+    always?: { tool_names: string[] };
+  } = {};
+  if (requireApproval.always) {
+    result.always = { tool_names: requireApproval.always.toolNames };
+  }
+  if (requireApproval.never) {
+    result.never = { tool_names: requireApproval.never.toolNames };
+  }
+  return result;
 }

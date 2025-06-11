@@ -33,6 +33,8 @@ import {
   ImageGenerationStatus,
   WebSearchStatus,
 } from './tools';
+import { camelOrSnakeToSnakeCase } from './utils/providerData';
+import { ProviderData } from '@openai/agents-core/types';
 
 type ToolChoice = ToolChoiceOptions | ToolChoiceTypes | ToolChoiceFunction;
 
@@ -40,6 +42,9 @@ const HostedToolChoice = z.enum([
   'file_search',
   'web_search_preview',
   'computer_use_preview',
+  'code_interpreter',
+  'image_generation',
+  'mcp',
 ]);
 
 const DefaultToolChoice = z.enum(['auto', 'required', 'none']);
@@ -133,8 +138,8 @@ function converTool<_TContext = unknown>(
       return {
         tool: {
           type: 'web_search_preview',
-          user_location: tool.providerData.userLocation,
-          search_context_size: tool.providerData.searchContextSize,
+          user_location: tool.providerData.user_location,
+          search_context_size: tool.providerData.search_context_size,
         },
         include: undefined,
       };
@@ -142,12 +147,17 @@ function converTool<_TContext = unknown>(
       return {
         tool: {
           type: 'file_search',
-          vector_store_ids: tool.providerData.vectorStoreId,
-          max_num_results: tool.providerData.maxNumResults,
-          ranking_options: tool.providerData.rankingOptions,
+          vector_store_ids:
+            tool.providerData.vector_store_ids ||
+            // for backwards compatibility
+            (typeof tool.providerData.vector_store_id === 'string'
+              ? [tool.providerData.vector_store_id]
+              : tool.providerData.vector_store_id),
+          max_num_results: tool.providerData.max_num_results,
+          ranking_options: tool.providerData.ranking_options,
           filters: tool.providerData.filters,
         },
-        include: tool.providerData.includeSearchResults
+        include: tool.providerData.include_search_results
           ? ['file_search_call.results']
           : undefined,
       };
@@ -164,14 +174,26 @@ function converTool<_TContext = unknown>(
         tool: {
           type: 'image_generation',
           background: tool.providerData.background,
-          input_image_mask: tool.providerData.inputImageMask,
+          input_image_mask: tool.providerData.input_image_mask,
           model: tool.providerData.model,
           moderation: tool.providerData.moderation,
-          output_compression: tool.providerData.outputCompression,
-          output_format: tool.providerData.outputFormat,
-          partial_images: tool.providerData.partialImages,
+          output_compression: tool.providerData.output_compression,
+          output_format: tool.providerData.output_format,
+          partial_images: tool.providerData.partial_images,
           quality: tool.providerData.quality,
           size: tool.providerData.size,
+        },
+        include: undefined,
+      };
+    } else if (tool.providerData?.type === 'mcp') {
+      return {
+        tool: {
+          type: 'mcp',
+          server_label: tool.providerData.server_label,
+          server_url: tool.providerData.server_url,
+          require_approval: convertMCPRequireApproval(
+            tool.providerData.require_approval,
+          ),
         },
         include: undefined,
       };
@@ -184,6 +206,23 @@ function converTool<_TContext = unknown>(
   }
 
   throw new Error(`Unsupported tool type: ${JSON.stringify(tool)}`);
+}
+
+function convertMCPRequireApproval(
+  requireApproval: ProviderData.HostedMCPTool['require_approval'],
+): OpenAI.Responses.Tool.Mcp.McpToolApprovalFilter | 'always' | 'never' | null {
+  if (requireApproval === 'never' || requireApproval === undefined) {
+    return 'never';
+  }
+
+  if (requireApproval === 'always') {
+    return 'always';
+  }
+
+  return {
+    never: { tool_names: requireApproval.never?.tool_names },
+    always: { tool_names: requireApproval.always?.tool_names },
+  };
 }
 
 function getHandoffTool(handoff: SerializedHandoff): OpenAI.Responses.Tool {
@@ -203,7 +242,7 @@ function getInputMessageContent(
     return {
       type: 'input_text',
       text: entry.text,
-      ...entry.providerData,
+      ...camelOrSnakeToSnakeCase(entry.providerData),
     };
   } else if (entry.type === 'input_image') {
     const imageEntry: OpenAI.Responses.ResponseInputImage = {
@@ -217,7 +256,7 @@ function getInputMessageContent(
     }
     return {
       ...imageEntry,
-      ...entry.providerData,
+      ...camelOrSnakeToSnakeCase(entry.providerData),
     };
   } else if (entry.type === 'input_file') {
     const fileEntry: OpenAI.Responses.ResponseInputFile = {
@@ -230,7 +269,7 @@ function getInputMessageContent(
     }
     return {
       ...fileEntry,
-      ...entry.providerData,
+      ...camelOrSnakeToSnakeCase(entry.providerData),
     };
   }
 
@@ -247,7 +286,7 @@ function getOutputMessageContent(
       type: 'output_text',
       text: entry.text,
       annotations: [],
-      ...entry.providerData,
+      ...camelOrSnakeToSnakeCase(entry.providerData),
     };
   }
 
@@ -255,7 +294,7 @@ function getOutputMessageContent(
     return {
       type: 'refusal',
       refusal: entry.refusal,
-      ...entry.providerData,
+      ...camelOrSnakeToSnakeCase(entry.providerData),
     };
   }
 
@@ -275,7 +314,7 @@ function getMessageItem(
       id: item.id,
       role: 'system',
       content: item.content,
-      ...item.providerData,
+      ...camelOrSnakeToSnakeCase(item.providerData),
     };
   }
 
@@ -285,7 +324,7 @@ function getMessageItem(
         id: item.id,
         role: 'user',
         content: item.content,
-        ...item.providerData,
+        ...camelOrSnakeToSnakeCase(item.providerData),
       };
     }
 
@@ -293,7 +332,7 @@ function getMessageItem(
       id: item.id,
       role: 'user',
       content: item.content.map(getInputMessageContent),
-      ...item.providerData,
+      ...camelOrSnakeToSnakeCase(item.providerData),
     };
   }
 
@@ -304,7 +343,7 @@ function getMessageItem(
       role: 'assistant',
       content: item.content.map(getOutputMessageContent),
       status: item.status,
-      ...item.providerData,
+      ...camelOrSnakeToSnakeCase(item.providerData),
     };
     return assistantMessage;
   }
@@ -349,7 +388,7 @@ function getInputItems(
         call_id: item.callId,
         arguments: item.arguments,
         status: item.status,
-        ...item.providerData,
+        ...camelOrSnakeToSnakeCase(item.providerData),
       };
 
       return entry;
@@ -367,7 +406,8 @@ function getInputItems(
         id: item.id,
         call_id: item.callId,
         output: item.output.text,
-        ...item.providerData,
+        status: item.status,
+        ...camelOrSnakeToSnakeCase(item.providerData),
       };
 
       return entry;
@@ -380,9 +420,10 @@ function getInputItems(
         summary: item.content.map((content) => ({
           type: 'summary_text',
           text: content.text,
-          ...content.providerData,
+          ...camelOrSnakeToSnakeCase(content.providerData),
         })),
-        ...item.providerData,
+        encrypted_content: item.providerData?.encryptedContent,
+        ...camelOrSnakeToSnakeCase(item.providerData),
       };
       return entry;
     }
@@ -395,7 +436,7 @@ function getInputItems(
         action: item.action,
         status: item.status,
         pending_safety_checks: [],
-        ...item.providerData,
+        ...camelOrSnakeToSnakeCase(item.providerData),
       };
 
       return entry;
@@ -407,7 +448,9 @@ function getInputItems(
         id: item.id,
         call_id: item.callId,
         output: buildResponseOutput(item),
-        ...item.providerData,
+        status: item.providerData?.status,
+        acknowledged_safety_checks: item.providerData?.acknowledgedSafetyChecks,
+        ...camelOrSnakeToSnakeCase(item.providerData),
       };
       return entry;
     }
@@ -418,7 +461,7 @@ function getInputItems(
           type: 'web_search_call',
           id: item.id!,
           status: WebSearchStatus.parse(item.status ?? 'failed'),
-          ...item.providerData,
+          ...camelOrSnakeToSnakeCase(item.providerData),
         };
 
         return entry;
@@ -430,7 +473,8 @@ function getInputItems(
           id: item.id!,
           status: FileSearchStatus.parse(item.status ?? 'failed'),
           queries: item.providerData?.queries ?? [],
-          ...item.providerData,
+          results: item.providerData?.results,
+          ...camelOrSnakeToSnakeCase(item.providerData),
         };
 
         return entry;
@@ -443,7 +487,8 @@ function getInputItems(
           code: item.providerData?.code ?? '',
           results: item.providerData?.results ?? [],
           status: CodeInterpreterStatus.parse(item.status ?? 'failed'),
-          ...item.providerData,
+          container_id: item.providerData?.containerId,
+          ...camelOrSnakeToSnakeCase(item.providerData),
         };
 
         return entry;
@@ -455,9 +500,73 @@ function getInputItems(
           id: item.id!,
           result: item.providerData?.result ?? null,
           status: ImageGenerationStatus.parse(item.status ?? 'failed'),
-          ...item.providerData,
+          ...camelOrSnakeToSnakeCase(item.providerData),
         };
 
+        return entry;
+      }
+
+      if (
+        item.providerData?.type === 'mcp_list_tools' ||
+        item.name === 'mcp_list_tools'
+      ) {
+        const providerData =
+          item.providerData as ProviderData.HostedMCPListTools;
+        const entry: OpenAI.Responses.ResponseInputItem.McpListTools = {
+          type: 'mcp_list_tools',
+          id: item.id!,
+          tools: camelOrSnakeToSnakeCase(providerData.tools) as any,
+          server_label: providerData.server_label,
+          error: providerData.error,
+          ...camelOrSnakeToSnakeCase(item.providerData),
+        };
+        return entry;
+      } else if (
+        item.providerData?.type === 'mcp_approval_request' ||
+        item.name === 'mcp_approval_request'
+      ) {
+        const providerData =
+          item.providerData as ProviderData.HostedMCPApprovalRequest;
+        const entry: OpenAI.Responses.ResponseInputItem.McpApprovalRequest = {
+          type: 'mcp_approval_request',
+          id: providerData.id ?? item.id!,
+          name: providerData.name,
+          arguments: providerData.arguments,
+          server_label: providerData.server_label,
+          ...camelOrSnakeToSnakeCase(item.providerData),
+        };
+        return entry;
+      } else if (
+        item.providerData?.type === 'mcp_approval_response' ||
+        item.name === 'mcp_approval_response'
+      ) {
+        const providerData =
+          item.providerData as ProviderData.HostedMCPApprovalResponse;
+        const entry: OpenAI.Responses.ResponseInputItem.McpApprovalResponse = {
+          type: 'mcp_approval_response',
+          id: providerData.id,
+          approve: providerData.approve,
+          approval_request_id: providerData.approval_request_id,
+          reason: providerData.reason,
+          ...camelOrSnakeToSnakeCase(providerData),
+        };
+        return entry;
+      } else if (
+        item.providerData?.type === 'mcp_call' ||
+        item.name === 'mcp_call'
+      ) {
+        const providerData = item.providerData as ProviderData.HostedMCPCall;
+        const entry: OpenAI.Responses.ResponseInputItem.McpCall = {
+          type: 'mcp_call',
+          id: providerData.id ?? item.id!,
+          name: providerData.name,
+          arguments: providerData.arguments,
+          server_label: providerData.server_label,
+          error: providerData.error,
+          // output, which can be a large text string, is optional here, so we don't include it
+          // output: item.output,
+          ...camelOrSnakeToSnakeCase(providerData),
+        };
         return entry;
       }
 
@@ -469,7 +578,7 @@ function getInputItems(
     if (item.type === 'unknown') {
       return {
         id: item.id,
-        ...item.providerData,
+        ...camelOrSnakeToSnakeCase(item.providerData),
       } as OpenAI.Responses.ResponseItem;
     }
 
@@ -495,7 +604,7 @@ function convertToMessageContentItem(
     const { type, text, ...remainingItem } = item;
     return {
       type,
-      text: text,
+      text,
       ...remainingItem,
     };
   }
@@ -504,7 +613,7 @@ function convertToMessageContentItem(
     const { type, refusal, ...remainingItem } = item;
     return {
       type,
-      refusal: refusal,
+      refusal,
       ...remainingItem,
     };
   }
@@ -517,14 +626,14 @@ function convertToOutputItem(
 ): protocol.OutputModelItem[] {
   return items.map((item) => {
     if (item.type === 'message') {
-      const { id, type, role, content, status, ...remainingItem } = item;
+      const { id, type, role, content, status, ...providerData } = item;
       return {
-        type,
         id,
+        type,
         role,
         content: content.map(convertToMessageContentItem),
         status,
-        providerData: remainingItem,
+        providerData,
       };
     } else if (
       item.type === 'file_search_call' ||
@@ -532,64 +641,95 @@ function convertToOutputItem(
       item.type === 'image_generation_call' ||
       item.type === 'code_interpreter_call'
     ) {
-      const { id, type, status, ...remainingItem } = item;
-      const outputData =
-        'result' in remainingItem && remainingItem.result !== null
-          ? remainingItem.result // type: "image_generation_call"
-          : undefined;
+      const { status, ...remainingItem } = item;
+      let outputData = undefined;
+      if ('result' in remainingItem && remainingItem.result !== null) {
+        // type: "image_generation_call"
+        outputData = remainingItem.result;
+        delete (remainingItem as any).result;
+      }
       const output: protocol.HostedToolCallItem = {
         type: 'hosted_tool_call',
-        id,
-        name: type,
-        status: status,
+        id: item.id!,
+        name: item.type,
+        status,
         output: outputData,
         providerData: remainingItem,
       };
       return output;
     } else if (item.type === 'function_call') {
-      const {
-        id,
-        call_id,
+      const { call_id, name, status, arguments: args, ...providerData } = item;
+      const output: protocol.FunctionCallItem = {
+        type: 'function_call',
+        id: item.id!,
+        callId: call_id,
         name,
         status,
         arguments: args,
-        ...remainingItem
-      } = item;
-      const output: protocol.FunctionCallItem = {
-        type: 'function_call',
-        id: id,
-        callId: call_id,
-        name: name,
-        status: status,
-        arguments: args,
-        providerData: remainingItem,
+        providerData,
       };
       return output;
     } else if (item.type === 'computer_call') {
-      const { id, call_id, status, action, ...remainingItem } = item;
+      const { call_id, status, action, ...providerData } = item;
       const output: protocol.ComputerUseCallItem = {
         type: 'computer_call',
-        id: id,
+        id: item.id!,
         callId: call_id,
-        status: status,
-        action: action,
-        providerData: remainingItem,
+        status,
+        action,
+        providerData,
+      };
+      return output;
+    } else if (item.type === 'mcp_list_tools') {
+      const { ...providerData } = item;
+      const output: protocol.HostedToolCallItem = {
+        type: 'hosted_tool_call',
+        id: item.id!,
+        name: item.type,
+        status: 'completed',
+        output: undefined,
+        providerData,
+      };
+      return output;
+    } else if (item.type === 'mcp_approval_request') {
+      const { ...providerData } = item;
+      const output: protocol.HostedToolCallItem = {
+        type: 'hosted_tool_call',
+        id: item.id!,
+        name: 'mcp_approval_request',
+        status: 'completed',
+        output: undefined,
+        providerData,
+      };
+      return output;
+    } else if (item.type === 'mcp_call') {
+      // Avoiding to duplicate potentially large output data
+      const { output: outputData, ...providerData } = item;
+      const output: protocol.HostedToolCallItem = {
+        type: 'hosted_tool_call',
+        id: item.id!,
+        name: item.type,
+        status: 'completed',
+        output: outputData || undefined,
+        providerData,
       };
       return output;
     } else if (item.type === 'reasoning') {
-      const { id, summary, ...remainingItem } = item;
+      // Avoiding to duplicate potentially large summary data
+      const { summary, ...providerData } = item;
       const output: protocol.ReasoningItem = {
         type: 'reasoning',
-        id: id,
+        id: item.id!,
         content: summary.map((content) => {
+          // Avoiding to duplicate potentially large text
           const { text, ...remainingContent } = content;
           return {
             type: 'input_text',
-            text: text,
+            text,
             providerData: remainingContent,
           };
         }),
-        providerData: remainingItem,
+        providerData,
       };
       return output;
     }
