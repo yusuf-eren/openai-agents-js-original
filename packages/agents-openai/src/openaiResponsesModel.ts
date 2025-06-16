@@ -365,6 +365,32 @@ function isMessageItem(item: protocol.ModelItem): item is protocol.MessageItem {
   return false;
 }
 
+function getPrompt(prompt: ModelRequest['prompt']): {
+  id: string;
+  version?: string;
+  variables?: Record<string, any>;
+} | null {
+  if (!prompt) {
+    return null;
+  }
+
+  const transformedVariables: Record<string, any> = {};
+
+  for (const [key, value] of Object.entries(prompt.variables ?? {})) {
+    if (typeof value === 'string') {
+      transformedVariables[key] = value;
+    } else if (typeof value === 'object') {
+      transformedVariables[key] = getInputMessageContent(value);
+    }
+  }
+
+  return {
+    id: prompt.promptId,
+    version: prompt.version,
+    variables: transformedVariables,
+  };
+}
+
 function getInputItems(
   input: ModelRequest['input'],
 ): OpenAI.Responses.ResponseInputItem[] {
@@ -777,6 +803,7 @@ export class OpenAIResponsesModel implements Model {
     const { tools, include } = getTools(request.tools, request.handoffs);
     const toolChoice = getToolChoice(request.modelSettings.toolChoice);
     const responseFormat = getResponseFormat(request.outputType);
+    const prompt = getPrompt(request.prompt);
 
     let parallelToolCalls: boolean | undefined = undefined;
     if (typeof request.modelSettings.parallelToolCalls === 'boolean') {
@@ -794,6 +821,7 @@ export class OpenAIResponsesModel implements Model {
       include,
       tools,
       previous_response_id: request.previousResponseId,
+      prompt,
       temperature: request.modelSettings.temperature,
       top_p: request.modelSettings.topP,
       truncation: request.modelSettings.truncation,

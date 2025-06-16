@@ -373,6 +373,7 @@ export class Runner extends RunHooks<any, AgentOutputType<unknown>> {
               systemInstructions: await state._currentAgent.getSystemPrompt(
                 state._context,
               ),
+              prompt: await state._currentAgent.getPrompt(state._context),
               input: turnInput,
               previousResponseId: options.previousResponseId,
               modelSettings,
@@ -726,6 +727,7 @@ export class Runner extends RunHooks<any, AgentOutputType<unknown>> {
             systemInstructions: await currentAgent.getSystemPrompt(
               result.state._context,
             ),
+            prompt: await currentAgent.getPrompt(result.state._context),
             input: turnInput,
             previousResponseId: options.previousResponseId,
             modelSettings,

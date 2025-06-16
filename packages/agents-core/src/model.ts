@@ -7,6 +7,9 @@ import {
   AgentOutputItem,
   JsonSchemaDefinition,
   TextOutput,
+  InputText,
+  InputImage,
+  InputFile,
 } from './types';
 
 export type ModelSettingsToolChoice =
@@ -203,6 +206,11 @@ export type ModelRequest = {
    * An optional signal to abort the model request.
    */
   signal?: AbortSignal;
+
+  /**
+   * The prompt template to use for the model, if any.
+   */
+  prompt?: Prompt;
 };
 
 export type ModelResponse = {
@@ -259,3 +267,25 @@ export interface ModelProvider {
    */
   getModel(modelName?: string): Promise<Model> | Model;
 }
+
+/**
+ * Reference to a prompt template and its variables.
+ */
+export type Prompt = {
+  /**
+   * The unique identifier of the prompt template to use.
+   */
+  promptId: string;
+  /**
+   * Optional version of the prompt template.
+   */
+  version?: string;
+  /**
+   * Optional variables to substitute into the prompt template.
+   * Can be a string, or an object with string keys and values that are string,
+   * InputText, InputImage, or InputFile.
+   */
+  variables?: {
+    [key: string]: string | InputText | InputImage | InputFile;
+  };
+};
