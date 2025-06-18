@@ -5,6 +5,8 @@ import {
   RealtimeClientMessage,
   RealtimeSessionConfig,
   RealtimeTracingConfig,
+  RealtimeTurnDetectionConfig,
+  RealtimeTurnDetectionConfigAsIs,
   RealtimeUserInput,
 } from './clientMessages';
 import {
@@ -390,7 +392,7 @@ export abstract class OpenAIRealtimeBase
         config.inputAudioTranscription ??
         DEFAULT_OPENAI_REALTIME_SESSION_CONFIG.inputAudioTranscription,
       turn_detection:
-        config.turnDetection ??
+        OpenAIRealtimeBase.buildTurnDetectionConfig(config.turnDetection) ??
         DEFAULT_OPENAI_REALTIME_SESSION_CONFIG.turnDetection,
       tool_choice:
         config.toolChoice ?? DEFAULT_OPENAI_REALTIME_SESSION_CONFIG.toolChoice,
@@ -404,6 +406,48 @@ export abstract class OpenAIRealtimeBase
     };
 
     return sessionData;
+  }
+
+  private static buildTurnDetectionConfig(
+    c: RealtimeTurnDetectionConfig | undefined,
+  ): RealtimeTurnDetectionConfigAsIs | undefined {
+    if (typeof c === 'undefined') {
+      return undefined;
+    }
+    const {
+      type,
+      createResponse,
+      create_response,
+      eagerness,
+      interruptResponse,
+      interrupt_response,
+      prefixPaddingMs,
+      prefix_padding_ms,
+      silenceDurationMs,
+      silence_duration_ms,
+      threshold,
+      ...rest
+    } = c;
+
+    const config: RealtimeTurnDetectionConfigAsIs & Record<string, any> = {
+      type,
+      create_response: createResponse ? createResponse : create_response,
+      eagerness,
+      interrupt_response: interruptResponse
+        ? interruptResponse
+        : interrupt_response,
+      prefix_padding_ms: prefixPaddingMs ? prefixPaddingMs : prefix_padding_ms,
+      silence_duration_ms: silenceDurationMs
+        ? silenceDurationMs
+        : silence_duration_ms,
+      threshold,
+      ...rest,
+    };
+    // Remove undefined values from the config
+    Object.keys(config).forEach((key) => {
+      if (config[key] === undefined) delete config[key];
+    });
+    return Object.keys(config).length > 0 ? config : undefined;
   }
 
   /**
