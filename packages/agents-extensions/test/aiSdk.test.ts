@@ -20,14 +20,14 @@ function stubModel(
     defaultObjectGenerationMode: undefined,
     async doGenerate(options) {
       if (partial.doGenerate) {
-        return partial.doGenerate(options);
+        return partial.doGenerate(options) as any;
       }
       return {
         text: '',
         finishReason: 'stop',
         usage: { promptTokens: 0, completionTokens: 0 },
         rawCall: { rawPrompt: '', rawSettings: {} },
-      };
+      } as any;
     },
     async doStream(options) {
       if (partial.doStream) {
@@ -86,7 +86,13 @@ describe('itemsToLanguageV1Messages', () => {
     const items: protocol.ModelItem[] = [
       {
         role: 'user',
-        content: [{ type: 'input_text', text: 'hi' }],
+        content: [
+          {
+            type: 'input_text',
+            text: 'hi',
+            providerData: { test: { cacheControl: { type: 'ephemeral' } } },
+          },
+        ],
       } as any,
       {
         type: 'function_call',
@@ -108,8 +114,14 @@ describe('itemsToLanguageV1Messages', () => {
     expect(msgs).toEqual([
       {
         role: 'user',
-        content: [{ type: 'text', text: 'hi' }],
-        providerMetadata: { stub: {} },
+        content: [
+          {
+            type: 'text',
+            text: 'hi',
+            providerMetadata: { test: { cacheControl: { type: 'ephemeral' } } },
+          },
+        ],
+        providerMetadata: {},
       },
       {
         role: 'assistant',
@@ -119,9 +131,10 @@ describe('itemsToLanguageV1Messages', () => {
             toolCallId: '1',
             toolName: 'foo',
             args: {},
+            providerMetadata: { a: 1 },
           },
         ],
-        providerMetadata: { stub: { a: 1 } },
+        providerMetadata: { a: 1 },
       },
       {
         role: 'tool',
@@ -131,9 +144,10 @@ describe('itemsToLanguageV1Messages', () => {
             toolCallId: '1',
             toolName: 'foo',
             result: { type: 'output_text', text: 'out' },
+            providerMetadata: { b: 2 },
           },
         ],
-        providerMetadata: { stub: { b: 2 } },
+        providerMetadata: { b: 2 },
       },
     ]);
   });
@@ -173,17 +187,27 @@ describe('itemsToLanguageV1Messages', () => {
       {
         role: 'user',
         content: [
-          { type: 'text', text: 'hi' },
-          { type: 'image', image: new URL('http://x/img') },
+          { type: 'text', text: 'hi', providerMetadata: {} },
+          {
+            type: 'image',
+            image: new URL('http://x/img'),
+            providerMetadata: {},
+          },
         ],
-        providerMetadata: { stub: {} },
+        providerMetadata: {},
       },
       {
         role: 'assistant',
         content: [
-          { type: 'tool-call', toolCallId: '1', toolName: 'do', args: {} },
+          {
+            type: 'tool-call',
+            toolCallId: '1',
+            toolName: 'do',
+            args: {},
+            providerMetadata: {},
+          },
         ],
-        providerMetadata: { stub: {} },
+        providerMetadata: {},
       },
       {
         role: 'tool',
@@ -193,14 +217,15 @@ describe('itemsToLanguageV1Messages', () => {
             toolCallId: '1',
             toolName: 'do',
             result: { type: 'output_text', text: 'out' },
+            providerMetadata: {},
           },
         ],
-        providerMetadata: { stub: {} },
+        providerMetadata: {},
       },
       {
         role: 'assistant',
-        content: [{ type: 'reasoning', text: 'why' }],
-        providerMetadata: { stub: {} },
+        content: [{ type: 'reasoning', text: 'why', providerMetadata: {} }],
+        providerMetadata: {},
       },
     ]);
   });
@@ -218,8 +243,8 @@ describe('itemsToLanguageV1Messages', () => {
     expect(msgs).toEqual([
       {
         role: 'user',
-        content: [{ type: 'text', text: 'hi' }],
-        providerMetadata: { stub: {} },
+        content: [{ type: 'text', text: 'hi', providerMetadata: {} }],
+        providerMetadata: {},
       },
     ]);
   });
@@ -300,9 +325,9 @@ describe('AiSdkModel.getResponse', () => {
             text: 'ok',
             finishReason: 'stop',
             usage: { promptTokens: 1, completionTokens: 2 },
-            providerMetadata: { stub: { p: 1 } },
+            providerMetadata: { p: 1 },
             rawCall: { rawPrompt: '', rawSettings: {} },
-          };
+          } as any;
         },
       }),
     );
@@ -381,9 +406,9 @@ describe('AiSdkModel.getResponse', () => {
             ],
             finishReason: 'stop',
             usage: { promptTokens: 1, completionTokens: 2 },
-            providerMetadata: { stub: { p: 1 } },
+            providerMetadata: { p: 1 },
             rawCall: { rawPrompt: '', rawSettings: {} },
-          };
+          } as any;
         },
       }),
     );
@@ -769,9 +794,11 @@ describe('AiSdkModel', () => {
             toolCallId: 'call1',
             toolName: 'do',
             args: {},
+
+            providerMetadata: { meta: 1 },
           },
         ],
-        providerMetadata: { fake: { meta: 1 } },
+        providerMetadata: { meta: 1 },
       },
     ]);
   });

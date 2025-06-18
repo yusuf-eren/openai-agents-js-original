@@ -51,9 +51,7 @@ export function itemsToLanguageV1Messages(
           role: 'system',
           content: content,
           providerMetadata: {
-            [model.provider]: {
-              ...(providerData ?? {}),
-            },
+            ...(providerData ?? {}),
           },
         });
         continue;
@@ -66,12 +64,25 @@ export function itemsToLanguageV1Messages(
             typeof content === 'string'
               ? [{ type: 'text', text: content }]
               : content.map((c) => {
+                  const { providerData: contentProviderData } = c;
                   if (c.type === 'input_text') {
-                    return { type: 'text', text: c.text };
+                    return {
+                      type: 'text',
+                      text: c.text,
+                      providerMetadata: {
+                        ...(contentProviderData ?? {}),
+                      },
+                    };
                   }
                   if (c.type === 'input_image') {
                     const url = new URL(c.image);
-                    return { type: 'image', image: url };
+                    return {
+                      type: 'image',
+                      image: url,
+                      providerMetadata: {
+                        ...(contentProviderData ?? {}),
+                      },
+                    };
                   }
                   if (c.type === 'input_file') {
                     if (typeof c.file !== 'string') {
@@ -82,14 +93,15 @@ export function itemsToLanguageV1Messages(
                       file: c.file,
                       mimeType: 'application/octet-stream',
                       data: c.file,
+                      providerMetadata: {
+                        ...(contentProviderData ?? {}),
+                      },
                     };
                   }
                   throw new UserError(`Unknown content type: ${c.type}`);
                 }),
           providerMetadata: {
-            [model.provider]: {
-              ...(providerData ?? {}),
-            },
+            ...(providerData ?? {}),
           },
         });
         continue;
@@ -106,19 +118,30 @@ export function itemsToLanguageV1Messages(
           content: content
             .filter((c) => c.type === 'input_text' || c.type === 'output_text')
             .map((c) => {
+              const { providerData: contentProviderData } = c;
               if (c.type === 'output_text') {
-                return { type: 'text', text: c.text };
+                return {
+                  type: 'text',
+                  text: c.text,
+                  providerMetadata: {
+                    ...(contentProviderData ?? {}),
+                  },
+                };
               }
               if (c.type === 'input_text') {
-                return { type: 'text', text: c.text };
+                return {
+                  type: 'text',
+                  text: c.text,
+                  providerMetadata: {
+                    ...(contentProviderData ?? {}),
+                  },
+                };
               }
               const exhaustiveCheck = c satisfies never;
               throw new UserError(`Unknown content type: ${exhaustiveCheck}`);
             }),
           providerMetadata: {
-            [model.provider]: {
-              ...(providerData ?? {}),
-            },
+            ...(providerData ?? {}),
           },
         });
         continue;
@@ -132,9 +155,7 @@ export function itemsToLanguageV1Messages(
           role: 'assistant',
           content: [],
           providerMetadata: {
-            [model.provider]: {
-              ...(item.providerData ?? {}),
-            },
+            ...(item.providerData ?? {}),
           },
         };
       }
@@ -148,6 +169,9 @@ export function itemsToLanguageV1Messages(
           toolCallId: item.callId,
           toolName: item.name,
           args: JSON.parse(item.arguments),
+          providerMetadata: {
+            ...(item.providerData ?? {}),
+          },
         };
         currentAssistantMessage.content.push(content);
       }
@@ -162,14 +186,15 @@ export function itemsToLanguageV1Messages(
         toolCallId: item.callId,
         toolName: item.name,
         result: item.output,
+        providerMetadata: {
+          ...(item.providerData ?? {}),
+        },
       };
       messages.push({
         role: 'tool',
         content: [toolResult],
         providerMetadata: {
-          [model.provider]: {
-            ...(item.providerData ?? {}),
-          },
+          ...(item.providerData ?? {}),
         },
       });
       continue;
@@ -194,11 +219,15 @@ export function itemsToLanguageV1Messages(
     ) {
       messages.push({
         role: 'assistant',
-        content: [{ type: 'reasoning', text: item.content[0].text }],
-        providerMetadata: {
-          [model.provider]: {
-            ...(item.providerData ?? {}),
+        content: [
+          {
+            type: 'reasoning',
+            text: item.content[0].text,
+            providerMetadata: { ...(item.providerData ?? {}) },
           },
+        ],
+        providerMetadata: {
+          ...(item.providerData ?? {}),
         },
       });
       continue;
@@ -344,11 +373,6 @@ export class AiSdkModel implements Model {
   }
 
   async getResponse(request: ModelRequest) {
-    if (this.#logger.dontLogModelData) {
-      this.#logger.debug('Request received');
-    } else {
-      this.#logger.debug('Request:', request);
-    }
     return withGenerationSpan(async (span) => {
       try {
         span.spanData.model = this.#model.provider + ':' + this.#model.modelId;
@@ -396,7 +420,7 @@ export class AiSdkModel implements Model {
         const responseFormat: LanguageModelV1CallOptions['responseFormat'] =
           getResponseFormat(request.outputType);
 
-        const result = await this.#model.doGenerate({
+        const aiSdkRequest: LanguageModelV1CallOptions = {
           inputFormat: 'messages',
           mode: {
             type: 'regular',
@@ -412,7 +436,15 @@ export class AiSdkModel implements Model {
           abortSignal: request.signal,
 
           ...(request.modelSettings.providerData ?? {}),
-        });
+        };
+
+        if (this.#logger.dontLogModelData) {
+          this.#logger.debug('Request sent');
+        } else {
+          this.#logger.debug('Request:', aiSdkRequest);
+        }
+
+        const result = await this.#model.doGenerate(aiSdkRequest);
 
         const output: ModelResponse['output'] = [];
 
@@ -423,9 +455,7 @@ export class AiSdkModel implements Model {
             name: toolCall.toolName,
             arguments: toolCall.args,
             status: 'completed',
-            providerData: !result.text
-              ? result.providerMetadata?.[this.#model.provider]
-              : undefined,
+            providerData: !result.text ? result.providerMetadata : undefined,
           });
         });
 
@@ -439,7 +469,7 @@ export class AiSdkModel implements Model {
             content: [{ type: 'output_text', text: result.text }],
             role: 'assistant',
             status: 'completed',
-            providerData: result.providerMetadata?.[this.#model.provider],
+            providerData: result.providerMetadata,
           });
         }
 
@@ -509,11 +539,6 @@ export class AiSdkModel implements Model {
   async *getStreamedResponse(
     request: ModelRequest,
   ): AsyncIterable<ResponseStreamEvent> {
-    if (this.#logger.dontLogModelData) {
-      this.#logger.debug('Request received (streamed)');
-    } else {
-      this.#logger.debug('Request (streamed):', request);
-    }
     const span = request.tracing ? createGenerationSpan() : undefined;
     try {
       if (span) {
@@ -564,7 +589,7 @@ export class AiSdkModel implements Model {
       const responseFormat: LanguageModelV1CallOptions['responseFormat'] =
         getResponseFormat(request.outputType);
 
-      const { stream } = await this.#model.doStream({
+      const aiSdkRequest: LanguageModelV1CallOptions = {
         inputFormat: 'messages',
         mode: {
           type: 'regular',
@@ -579,7 +604,15 @@ export class AiSdkModel implements Model {
         responseFormat,
         abortSignal: request.signal,
         ...(request.modelSettings.providerData ?? {}),
-      });
+      };
+
+      if (this.#logger.dontLogModelData) {
+        this.#logger.debug('Request received (streamed)');
+      } else {
+        this.#logger.debug('Request (streamed):', aiSdkRequest);
+      }
+
+      const { stream } = await this.#model.doStream(aiSdkRequest);
 
       let started = false;
       let responseId: string | undefined;
