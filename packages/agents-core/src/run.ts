@@ -127,7 +127,7 @@ export type RunConfig = {
   /**
    * An optional dictionary of additional metadata to include with the trace.
    */
-  traceMetadata?: Record<string, any>;
+  traceMetadata?: Record<string, string>;
 };
 
 type SharedRunOptions<TContext = undefined> = {
@@ -956,13 +956,21 @@ export class Runner extends RunHooks<any, AgentOutputType<unknown>> {
       });
     }
 
-    return getOrCreateTrace(async () => {
-      if (options?.stream) {
-        return this.#runIndividualStream(agent, input, options);
-      } else {
-        return this.#runIndividualNonStream(agent, input, options);
-      }
-    });
+    return getOrCreateTrace(
+      async () => {
+        if (options?.stream) {
+          return this.#runIndividualStream(agent, input, options);
+        } else {
+          return this.#runIndividualNonStream(agent, input, options);
+        }
+      },
+      {
+        traceId: this.config.traceId,
+        name: this.config.workflowName,
+        groupId: this.config.groupId,
+        metadata: this.config.traceMetadata,
+      },
+    );
   }
 }
 
