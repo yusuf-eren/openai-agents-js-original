@@ -219,7 +219,7 @@ export async function getAllMcpFunctionTools<TContext = UnknownContext>(
   return allTools;
 }
 
-const _cachedTools: Record<string, FunctionTool<any, any, unknown>[]> = {};
+const _cachedTools: Record<string, MCPTool[]> = {};
 /**
  * Remove cached tools for the given server so the next lookup fetches fresh data.
  *
@@ -236,7 +236,9 @@ async function getFunctionToolsFromServer<TContext = UnknownContext>(
   convertSchemasToStrict: boolean,
 ): Promise<FunctionTool<TContext, any, unknown>[]> {
   if (server.cacheToolsList && _cachedTools[server.name]) {
-    return _cachedTools[server.name];
+    return _cachedTools[server.name].map((t) =>
+      mcpToFunctionTool(t, server, convertSchemasToStrict),
+    );
   }
   return withMCPListToolsSpan(
     async (span) => {
@@ -246,7 +248,7 @@ async function getFunctionToolsFromServer<TContext = UnknownContext>(
         mcpToFunctionTool(t, server, convertSchemasToStrict),
       );
       if (server.cacheToolsList) {
-        _cachedTools[server.name] = tools;
+        _cachedTools[server.name] = mcpTools;
       }
       return tools;
     },
