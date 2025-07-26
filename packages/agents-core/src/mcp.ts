@@ -299,6 +299,7 @@ export function mcpToFunctionTool(
   }
 
   const schema: JsonObjectSchema<any> = {
+    ...mcpTool.inputSchema,
     type: mcpTool.inputSchema?.type ?? 'object',
     properties: mcpTool.inputSchema?.properties ?? {},
     required: mcpTool.inputSchema?.required ?? [],
