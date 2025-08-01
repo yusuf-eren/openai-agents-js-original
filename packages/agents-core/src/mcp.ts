@@ -431,6 +431,7 @@ export interface BaseMCPServerStdioOptions {
   encodingErrorHandler?: 'strict' | 'ignore' | 'replace';
   logger?: Logger;
   toolFilter?: MCPToolFilterCallable | MCPToolFilterStatic;
+  timeout?: number;
 }
 export interface DefaultMCPServerStdioOptions
   extends BaseMCPServerStdioOptions {
@@ -452,6 +453,7 @@ export interface MCPServerStreamableHttpOptions {
   name?: string;
   logger?: Logger;
   toolFilter?: MCPToolFilterCallable | MCPToolFilterStatic;
+  timeout?: number;
 
   // ----------------------------------------------------
   // OAuth

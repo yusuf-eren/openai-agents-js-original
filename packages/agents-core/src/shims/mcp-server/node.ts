@@ -1,4 +1,5 @@
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/protocol';
 
 import {
   BaseMCPServerStdio,
@@ -34,6 +35,7 @@ export class NodeMCPServerStdio extends BaseMCPServerStdio {
   protected _toolsList: any[] = [];
   protected serverInitializeResult: InitializeResult | null = null;
   protected clientSessionTimeoutSeconds?: number;
+  protected timeout: number;
 
   params: DefaultMCPServerStdioOptions;
   private _name: string;
@@ -42,6 +44,7 @@ export class NodeMCPServerStdio extends BaseMCPServerStdio {
   constructor(params: MCPServerStdioOptions) {
     super(params);
     this.clientSessionTimeoutSeconds = params.clientSessionTimeoutSeconds ?? 5;
+    this.timeout = params.timeout ?? DEFAULT_REQUEST_TIMEOUT_MSEC;
     if ('fullCommand' in params) {
       const elements = params.fullCommand.split(' ');
       const command = elements.shift();
@@ -128,10 +131,16 @@ export class NodeMCPServerStdio extends BaseMCPServerStdio {
         'Server not initialized. Make sure you call connect() first.',
       );
     }
-    const response = await this.session.callTool({
-      name: toolName,
-      arguments: args ?? {},
-    });
+    const response = await this.session.callTool(
+      {
+        name: toolName,
+        arguments: args ?? {},
+      },
+      undefined,
+      {
+        timeout: this.timeout,
+      },
+    );
     const parsed = CallToolResultSchema.parse(response);
     const result = parsed.content;
     this.debugLog(
@@ -163,6 +172,7 @@ export class NodeMCPServerStreamableHttp extends BaseMCPServerStreamableHttp {
   protected _toolsList: any[] = [];
   protected serverInitializeResult: InitializeResult | null = null;
   protected clientSessionTimeoutSeconds?: number;
+  protected timeout: number;
 
   params: MCPServerStreamableHttpOptions;
   private _name: string;
@@ -173,6 +183,7 @@ export class NodeMCPServerStreamableHttp extends BaseMCPServerStreamableHttp {
     this.clientSessionTimeoutSeconds = params.clientSessionTimeoutSeconds ?? 5;
     this.params = params;
     this._name = params.name || `streamable-http: ${this.params.url}`;
+    this.timeout = params.timeout ?? DEFAULT_REQUEST_TIMEOUT_MSEC;
   }
 
   async connect(): Promise<void> {
@@ -245,10 +256,16 @@ export class NodeMCPServerStreamableHttp extends BaseMCPServerStreamableHttp {
         'Server not initialized. Make sure you call connect() first.',
       );
     }
-    const response = await this.session.callTool({
-      name: toolName,
-      arguments: args ?? {},
-    });
+    const response = await this.session.callTool(
+      {
+        name: toolName,
+        arguments: args ?? {},
+      },
+      undefined,
+      {
+        timeout: this.timeout,
+      },
+    );
     const parsed = CallToolResultSchema.parse(response);
     const result = parsed.content;
     this.debugLog(
