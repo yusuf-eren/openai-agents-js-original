@@ -309,6 +309,7 @@ You must return **only** the translated markdown. Do not include any commentary,
 - Section titles must be translated except for the Do-Not-Translate list.
 - Do not omit any content. If a segment should stay in English, copy it verbatim.
 - Do not change the markdown data structure, including the indentations.
+- Keep the valid *.md/*.mdx data structure; Do not break anything at runtime.
 - Don't add any tags that don't exist in the origin text
 - Keep all placeholders such as \`CODE_BLOCK_*\` and \`CODE_LINE_PREFIX\` unchanged.
 - Don't add any tags before/after lines using astrojs items such as <Code> and their imports

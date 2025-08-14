@@ -36,7 +36,9 @@ jobs:
       - name: Translate docs
         env:
           OPENAI_API_KEY: ${{ secrets.PROD_OPENAI_API_KEY }}
-        run: pnpm docs:translate
+        run: |
+          pnpm docs:translate
+          pnpm docs:build  # to make sure if the generated docs are valid
 
       - name: Commit changes
         id: commit
