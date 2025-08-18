@@ -329,7 +329,10 @@ export abstract class OpenAIRealtimeBase
           type: parsed.item.type,
           role: parsed.item.role,
           content: parsed.item.content,
-          status: 'in_progress',
+          status:
+            parsed.type === 'response.output_item.done'
+              ? (item.status ?? 'completed')
+              : (item.status ?? 'in_progress')
         });
         this.emit('item_update', realtimeItem);
         return;
