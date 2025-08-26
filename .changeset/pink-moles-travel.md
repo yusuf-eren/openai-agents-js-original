@@ -1,9 +1,5 @@
 ---
 '@openai/agents': minor
-'@openai/agents-core': minor
-'@openai/agents-extensions': minor
-'@openai/agents-openai': minor
-'@openai/agents-realtime': minor
 ---
 
 Bump to v0.1 with the following chnages:
