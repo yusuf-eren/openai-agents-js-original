@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - 'docs/**'
+      - 'docs/src/content/**'
       - '!docs/src/content/docs/ja/**'
 
 jobs:
