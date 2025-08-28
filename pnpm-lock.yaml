@@ -169,6 +169,15 @@ importers:
         specifier: ^3.25.40
         version: 3.25.62
 
+  examples/connectors:
+    dependencies:
+      '@openai/agents':
+        specifier: workspace:*
+        version: link:../../packages/agents
+      zod:
+        specifier: ^3.25.40
+        version: 3.25.62
+
   examples/customer-service:
     dependencies:
       '@openai/agents':
