@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, expectTypeOf, it, vi } from 'vitest';
-import { z } from 'zod/v3';
+import { z } from 'zod';
 import {
   Agent,
   MaxTurnsExceededError,
@@ -139,6 +139,38 @@ describe('Runner.run', () => {
       const agent = new Agent({ name: 'Fail', model: new FakeModel() });
 
       await expect(run(agent, 'fail')).rejects.toThrow('No response found');
+    });
+
+    it('emits agent_end lifecycle event for non-streaming agents', async () => {
+      const agent = new Agent({
+        name: 'TestAgent',
+      });
+
+      // Track agent_end events on both the agent and runner
+      const agentEndEvents: Array<{ context: any; output: string }> = [];
+      const runnerEndEvents: Array<{ context: any; agent: any; output: string }> = [];
+
+      agent.on('agent_end', (context, output) => {
+        agentEndEvents.push({ context, output });
+      });
+
+      const runner = new Runner();
+      runner.on('agent_end', (context, agent, output) => {
+        runnerEndEvents.push({ context, agent, output });
+      });
+
+      const result = await runner.run(agent, 'test input');
+
+      // Verify the result has the expected output
+      expect(result.finalOutput).toBe('Hello World');
+
+      // Verify agent_end was called on both agent and runner
+      expect(agentEndEvents).toHaveLength(1);
+      expect(agentEndEvents[0].output).toBe('Hello World');
+
+      expect(runnerEndEvents).toHaveLength(1);
+      expect(runnerEndEvents[0].agent).toBe(agent);
+      expect(runnerEndEvents[0].output).toBe('Hello World');
     });
   });
 
@@ -375,7 +407,7 @@ describe('Runner.run', () => {
         usage: new Usage(),
       };
       class SimpleStreamingModel implements Model {
-        constructor(private resps: ModelResponse[]) {}
+        constructor(private resps: ModelResponse[]) { }
         async getResponse(_req: ModelRequest): Promise<ModelResponse> {
           const r = this.resps.shift();
           if (!r) {

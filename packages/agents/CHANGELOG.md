@@ -1,5 +1,131 @@
 # @openai/agents
 
+## 0.1.0
+
+### Minor Changes
+
+- 80e1fc1: Bump to v0.1 with the following chnages:
+  - gpt-5 model support
+  - opt-in: gpt-5 as default option
+  - ai-sdk model provider v2 migration
+
+  and more
+
+### Patch Changes
+
+- 2260e21: Upgrade openai package to the latest version
+- 79a1999: Make docs and comments more consistent using Codex
+- Updated dependencies [2260e21]
+- Updated dependencies [94f606c]
+- Updated dependencies [79a1999]
+- Updated dependencies [8cf5356]
+- Updated dependencies [47a28ad]
+- Updated dependencies [f1e2f60]
+- Updated dependencies [42702c0]
+- Updated dependencies [ecea142]
+- Updated dependencies [2b10adc]
+- Updated dependencies [f1e2f60]
+- Updated dependencies [8fc01fc]
+- Updated dependencies [6f1677c]
+  - @openai/agents-openai@0.1.0
+  - @openai/agents-core@0.1.0
+  - @openai/agents-realtime@0.1.0
+
+## 0.0.17
+
+### Patch Changes
+
+- f825f71: Fix #187 Agent outputType type error with zod@3.25.68+
+- 5d247a5: Fix #245 CJS resolution failure
+- Updated dependencies [1cd3266]
+- Updated dependencies [f825f71]
+- Updated dependencies [5d247a5]
+  - @openai/agents-core@0.0.17
+  - @openai/agents-realtime@0.0.17
+  - @openai/agents-openai@0.0.17
+
+## 0.0.16
+
+### Patch Changes
+
+- Updated dependencies [1bb4d86]
+- Updated dependencies [a51105b]
+- Updated dependencies [b487db1]
+- Updated dependencies [4818d5e]
+- Updated dependencies [0858c98]
+- Updated dependencies [a0b1f3b]
+- Updated dependencies [4bfd911]
+- Updated dependencies [c42a0a9]
+  - @openai/agents-core@0.0.16
+  - @openai/agents-openai@0.0.16
+  - @openai/agents-realtime@0.0.16
+
+## 0.0.15
+
+### Patch Changes
+
+- Updated dependencies [5f7d0d6]
+- Updated dependencies [7b437d9]
+- Updated dependencies [b65315f]
+- Updated dependencies [0fe38c0]
+  - @openai/agents-core@0.0.15
+  - @openai/agents-openai@0.0.15
+  - @openai/agents-realtime@0.0.15
+
+## 0.0.14
+
+### Patch Changes
+
+- Updated dependencies [08dd469]
+- Updated dependencies [d9c4ddf]
+- Updated dependencies [b6c7e9d]
+- Updated dependencies [fba44d9]
+  - @openai/agents-realtime@0.0.14
+  - @openai/agents-core@0.0.14
+  - @openai/agents-openai@0.0.14
+
+## 0.0.13
+
+### Patch Changes
+
+- Updated dependencies [bd463ef]
+- Updated dependencies [9fdecdb]
+- Updated dependencies [25241e4]
+  - @openai/agents-core@0.0.13
+  - @openai/agents-realtime@0.0.13
+  - @openai/agents-openai@0.0.13
+
+## 0.0.12
+
+### Patch Changes
+
+- Updated dependencies [af73bfb]
+- Updated dependencies [fe5fb97]
+- Updated dependencies [ad05c65]
+- Updated dependencies [a2f78fe]
+- Updated dependencies [886e25a]
+- Updated dependencies [d9b94b3]
+- Updated dependencies [f6e68f4]
+- Updated dependencies [046f8cc]
+- Updated dependencies [ed66acf]
+- Updated dependencies [40dc0be]
+  - @openai/agents-core@0.0.12
+  - @openai/agents-openai@0.0.12
+  - @openai/agents-realtime@0.0.12
+
+## 0.0.11
+
+### Patch Changes
+
+- Updated dependencies [a60eabe]
+- Updated dependencies [07939c0]
+- Updated dependencies [a153963]
+- Updated dependencies [6e0d1bd]
+- Updated dependencies [17077d8]
+  - @openai/agents-core@0.0.11
+  - @openai/agents-realtime@0.0.11
+  - @openai/agents-openai@0.0.11
+
 ## 0.0.10
 
 ### Patch Changes

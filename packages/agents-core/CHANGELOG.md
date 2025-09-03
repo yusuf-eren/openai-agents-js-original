@@ -1,5 +1,83 @@
 # @openai/agents-core
 
+## 0.1.0
+
+### Minor Changes
+
+- f1e2f60: moving realtime to the new GA API and add MCP support
+
+### Patch Changes
+
+- 2260e21: Upgrade openai package to the latest version
+- 94f606c: Fix #371 streaming agents not calling agent_end lifecycle hook
+- 79a1999: Make docs and comments more consistent using Codex
+- 42702c0: #366 Add conversations API support
+- ecea142: Fix #374 add connector support
+- 2b10adc: Fix #393 add domain filtering and sources to web search tool & upgrade openai package to the latest version
+- 8fc01fc: Add a quick opt-in option to switch to gpt-5
+- 6f1677c: fix(tracing): Fix #361 include groupId in trace export log message
+
+## 0.0.17
+
+### Patch Changes
+
+- 1cd3266: feat: expose the `history` getter on `RunState` to access input and generated items.
+- f825f71: Fix #187 Agent outputType type error with zod@3.25.68+
+- 5d247a5: Fix #245 CJS resolution failure
+
+## 0.0.16
+
+### Patch Changes
+
+- 1bb4d86: Fix #233 - eliminate confusion with "input_text" type items with role: "assistant"
+- 4818d5e: fix: support snake_case usage fields from OpenAI responses
+- 0858c98: fix: prevent crash when importing in cloudflare workers
+
+  An export was missed in https://github.com/openai/openai-agents-js/pull/290 for the workerd shim, this prevents the crash when importing there. Long term we should just add an implementation for cloudflare workers (and I suspect the node implementation might just work)
+
+- 4bfd911: Add custom fetch support to StreamableHTTP MCP transport
+- c42a0a9: refactor: restructure mcp tools fetching with options object pattern
+
+## 0.0.15
+
+### Patch Changes
+
+- 5f7d0d6: Add run context to handoff input filter to align with Python SDK
+- 7b437d9: feat: add reasoning handling in chat completions
+- b65315f: feat: add timeout parameter to callTool method
+- 0fe38c0: feat: add sse server implementation for mcp
+
+## 0.0.14
+
+### Patch Changes
+
+- 08dd469: agents-core, agents-realtime: add MCP tool-filtering support (fixes #162)
+- d9c4ddf: include JsonSchema definitions in mcpTool inputSchema
+- fba44d9: Fix #246 by exposing RunHandoffOutputItem type
+
+## 0.0.13
+
+### Patch Changes
+
+- bd463ef: Fix #219 MCPServer#invalidateToolsCache() not exposed while being mentioned in the documents
+
+## 0.0.12
+
+### Patch Changes
+
+- af73bfb: Rebinds cached tools to the current MCP server to avoid stale tool invocation (fixes #195)
+- 046f8cc: Fix typos across repo
+- ed66acf: Fixes handling of `agent_updated_stream_event` in run implementation and adds corresponding test coverage.
+- 40dc0be: Fix #216 Publicly accessible PDF file URL is not yet supported in the input_file content data
+
+## 0.0.11
+
+### Patch Changes
+
+- a60eabe: Fix #131 Human in the Loop MCP approval fails
+- a153963: Tentative fix for #187 : Lock zod version to <=3.25.67
+- 17077d8: Fix #175 by removing internal system.exit calls
+
 ## 0.0.10
 
 ### Patch Changes

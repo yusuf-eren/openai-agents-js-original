@@ -58,11 +58,21 @@ describe('OpenAIRealtimeWebSocket', () => {
     expect(statuses).toEqual(['connecting', 'connected']);
   });
 
+  it('uses custom url from constructor', async () => {
+    const ws = new OpenAIRealtimeWebSocket({ url: 'ws://test' });
+    const p = ws.connect({ apiKey: 'ek_test', model: 'm' });
+    await vi.runAllTimersAsync();
+    await p;
+    expect(lastFakeSocket!.url).toBe('ws://test');
+  });
+
   it('handles audio delta, speech started and created/done events', async () => {
     const ws = new OpenAIRealtimeWebSocket();
     const audioSpy = vi.fn();
     ws.on('audio', audioSpy);
-    const sendSpy = vi.spyOn(ws, 'sendEvent');
+    const sendSpy = vi
+      .spyOn(ws as any, 'sendEvent')
+      .mockImplementation(() => {});
     const interruptSpy = vi.spyOn(ws, 'interrupt');
     const p = ws.connect({ apiKey: 'ek', model: 'm' });
     await vi.runAllTimersAsync();
@@ -79,7 +89,7 @@ describe('OpenAIRealtimeWebSocket', () => {
     // audio arrives
     lastFakeSocket!.emit('message', {
       data: JSON.stringify({
-        type: 'response.audio.delta',
+        type: 'response.output_audio.delta',
         event_id: '2',
         item_id: 'i',
         content_index: 0,
@@ -101,11 +111,13 @@ describe('OpenAIRealtimeWebSocket', () => {
     });
     expect(interruptSpy).toHaveBeenCalled();
     expect(
-      sendSpy.mock.calls.some((c) => c[0].type === 'response.cancel'),
+      sendSpy.mock.calls.some(
+        (c: unknown[]) => (c[0] as any).type === 'response.cancel',
+      ),
     ).toBe(true);
     expect(
       sendSpy.mock.calls.some(
-        (c) => c[0].type === 'conversation.item.truncate',
+        (c: unknown[]) => (c[0] as any).type === 'conversation.item.truncate',
       ),
     ).toBe(true);
 
@@ -121,7 +133,7 @@ describe('OpenAIRealtimeWebSocket', () => {
     });
     lastFakeSocket!.emit('message', {
       data: JSON.stringify({
-        type: 'response.audio.delta',
+        type: 'response.output_audio.delta',
         event_id: '5',
         item_id: 'i2',
         content_index: 0,
@@ -139,7 +151,9 @@ describe('OpenAIRealtimeWebSocket', () => {
       }),
     });
     expect(
-      sendSpy.mock.calls.every((c) => c[0].type !== 'response.cancel'),
+      sendSpy.mock.calls.every(
+        (c: unknown[]) => (c[0] as any).type !== 'response.cancel',
+      ),
     ).toBe(true);
   });
 
@@ -150,13 +164,15 @@ describe('OpenAIRealtimeWebSocket', () => {
 
   it('close resets state so interrupt does nothing', async () => {
     const ws = new OpenAIRealtimeWebSocket();
-    const sendSpy = vi.spyOn(ws, 'sendEvent');
+    const sendSpy = vi
+      .spyOn(OpenAIRealtimeWebSocket.prototype as any, 'sendEvent')
+      .mockImplementation(() => {});
     const p = ws.connect({ apiKey: 'ek', model: 'm' });
     await vi.runAllTimersAsync();
     await p;
     lastFakeSocket!.emit('message', {
       data: JSON.stringify({
-        type: 'response.audio.delta',
+        type: 'response.output_audio.delta',
         event_id: '7',
         item_id: 'i',
         content_index: 0,
@@ -189,6 +205,99 @@ describe('OpenAIRealtimeWebSocket', () => {
     expect(baseSpy).toHaveBeenCalled();
   });
 
+  it('_interrupt quantizes and clamps elapsedTime', () => {
+    const ws = new OpenAIRealtimeWebSocket();
+    const sendSpy = vi
+      .spyOn(OpenAIRealtimeWebSocket.prototype as any, 'sendEvent')
+      .mockImplementation(() => {});
+    // @ts-expect-error - testing protected field.
+    ws._audioLengthMs = 100;
+    ws._interrupt(110.9, false);
+    let call = sendSpy.mock.calls.find(
+      (c: unknown[]) => (c[0] as any).type === 'conversation.item.truncate',
+    );
+    expect((call?.[0] as any).audio_end_ms).toBe(100);
+    sendSpy.mockClear();
+    // @ts-expect-error - testing protected field.
+    ws._audioLengthMs = 200;
+    ws._interrupt(123.7, false);
+    call = sendSpy.mock.calls.find(
+      (c: unknown[]) => (c[0] as any).type === 'conversation.item.truncate',
+    );
+    expect((call?.[0] as any).audio_end_ms).toBe(123);
+    sendSpy.mockRestore();
+  });
+
+  it('_interrupt floors sub-millisecond elapsedTime', () => {
+    const ws = new OpenAIRealtimeWebSocket();
+    const sendSpy = vi
+      .spyOn(OpenAIRealtimeWebSocket.prototype as any, 'sendEvent')
+      .mockImplementation(() => {});
+    // @ts-expect-error - testing protected field.
+    ws._audioLengthMs = 100;
+    ws._interrupt(0.9, false);
+    const call = sendSpy.mock.calls.find(
+      (c: unknown[]) => (c[0] as any).type === 'conversation.item.truncate',
+    );
+    expect((call?.[0] as any).audio_end_ms).toBe(0);
+    expect(Number.isInteger((call?.[0] as any).audio_end_ms)).toBe(true);
+    sendSpy.mockRestore();
+  });
+
+  it('_interrupt clamps overshoot elapsedTime', () => {
+    const ws = new OpenAIRealtimeWebSocket();
+    const sendSpy = vi
+      .spyOn(OpenAIRealtimeWebSocket.prototype as any, 'sendEvent')
+      .mockImplementation(() => {});
+    // @ts-expect-error - testing protected field.
+    ws._audioLengthMs = 42;
+    ws._interrupt(42.6, false);
+    const call = sendSpy.mock.calls.find(
+      (c: unknown[]) => (c[0] as any).type === 'conversation.item.truncate',
+    );
+    expect((call?.[0] as any).audio_end_ms).toBe(42);
+    expect(Number.isInteger((call?.[0] as any).audio_end_ms)).toBe(true);
+    sendSpy.mockRestore();
+  });
+
+  it('interrupt payload is integer with fractional speed', async () => {
+    const ws = new OpenAIRealtimeWebSocket();
+    const sendSpy = vi
+      .spyOn(OpenAIRealtimeWebSocket.prototype as any, 'sendEvent')
+      .mockImplementation(() => {});
+    const p = ws.connect({
+      apiKey: 'ek',
+      model: 'm',
+      initialSessionConfig: { speed: 1.1 },
+    } as any);
+    await vi.runAllTimersAsync();
+    await p;
+    // @ts-expect-error - testing protected field.
+    ws._audioLengthMs = 200;
+    ws._interrupt(123.4, false);
+    const call = sendSpy.mock.calls.find(
+      (c: unknown[]) => (c[0] as any).type === 'conversation.item.truncate',
+    );
+    expect(Number.isInteger((call?.[0] as any).audio_end_ms)).toBe(true);
+    sendSpy.mockRestore();
+  });
+
+  it('interrupt payload is integer with speed 1', () => {
+    const ws = new OpenAIRealtimeWebSocket();
+    const sendSpy = vi
+      .spyOn(OpenAIRealtimeWebSocket.prototype as any, 'sendEvent')
+      .mockImplementation(() => {});
+    // @ts-expect-error - testing protected field.
+    ws._audioLengthMs = 200;
+    ws._interrupt(123.4, false);
+    const call = sendSpy.mock.calls.find(
+      (c: unknown[]) => (c[0] as any).type === 'conversation.item.truncate',
+    );
+    expect((call?.[0] as any).audio_end_ms).toBe(123);
+    expect(Number.isInteger((call?.[0] as any).audio_end_ms)).toBe(true);
+    sendSpy.mockRestore();
+  });
+
   it('full interrupt/_interrupt flow', async () => {
     const ws = new OpenAIRealtimeWebSocket();
     const sendSpy = vi.spyOn(ws, 'sendEvent');
@@ -204,7 +313,7 @@ describe('OpenAIRealtimeWebSocket', () => {
     });
     lastFakeSocket!.emit('message', {
       data: JSON.stringify({
-        type: 'response.audio.delta',
+        type: 'response.output_audio.delta',
         event_id: '2',
         item_id: 'i',
         content_index: 0,
@@ -222,11 +331,13 @@ describe('OpenAIRealtimeWebSocket', () => {
       }),
     });
     expect(
-      sendSpy.mock.calls.some((c) => c[0].type === 'response.cancel'),
+      sendSpy.mock.calls.some(
+        (c: unknown[]) => (c[0] as any).type === 'response.cancel',
+      ),
     ).toBe(true);
     expect(
       sendSpy.mock.calls.some(
-        (c) => c[0].type === 'conversation.item.truncate',
+        (c: unknown[]) => (c[0] as any).type === 'conversation.item.truncate',
       ),
     ).toBe(true);
     sendSpy.mockClear();

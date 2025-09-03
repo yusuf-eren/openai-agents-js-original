@@ -1,4 +1,4 @@
-import { z } from '@openai/zod/v3';
+import { z } from 'zod';
 import { Agent } from './agent';
 import {
   RunMessageOutputItem,
@@ -12,6 +12,7 @@ import {
 } from './items';
 import type { ModelResponse } from './model';
 import { RunContext } from './runContext';
+import { getTurnInput } from './run';
 import {
   AgentToolUseTracker,
   nextStepSchema,
@@ -165,6 +166,8 @@ const serializedProcessedResponseSchema = z.object({
             arguments: z.string().optional(),
             status: z.string().optional(),
             output: z.string().optional(),
+            // this always exists but marked as optional for early version compatibility; when releasing 1.0, we can remove the nullable and optional
+            providerData: z.record(z.string(), z.any()).nullable().optional(),
           }),
         }),
         // HostedMCPTool
@@ -323,6 +326,15 @@ export class RunState<TContext, TAgent extends Agent<any, any>> {
     this._inputGuardrailResults = [];
     this._outputGuardrailResults = [];
     this._trace = getCurrentTrace();
+  }
+
+  /**
+   * The history of the agent run. This includes the input items and the new items generated during the run.
+   *
+   * This can be used as inputs for the next agent run.
+   */
+  get history(): AgentInputItem[] {
+    return getTurnInput(this._originalInput, this._generatedItems);
   }
 
   /**
@@ -555,6 +567,7 @@ export class RunState<TContext, TAgent extends Agent<any, any>> {
       ? await deserializeProcessedResponse(
           agentMap,
           state._currentAgent,
+          state._context,
           stateJson.lastProcessedResponse,
         )
       : undefined;
@@ -705,11 +718,12 @@ export function deserializeItem(
 async function deserializeProcessedResponse<TContext = UnknownContext>(
   agentMap: Map<string, Agent<any, any>>,
   currentAgent: Agent<TContext, any>,
+  context: RunContext<TContext>,
   serializedProcessedResponse: z.infer<
     typeof serializedProcessedResponseSchema
   >,
 ): Promise<ProcessedResponse<TContext>> {
-  const allTools = await currentAgent.getAllTools();
+  const allTools = await currentAgent.getAllTools(context);
   const tools = new Map(
     allTools
       .filter((tool) => tool.type === 'function')

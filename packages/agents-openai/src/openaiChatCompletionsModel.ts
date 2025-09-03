@@ -35,6 +35,23 @@ import { protocol } from '@openai/agents-core';
 
 export const FAKE_ID = 'FAKE_ID';
 
+// Some Chat Completions API compatible providers return a reasoning property on the message
+// If that's the case we handle them separately
+type OpenAIMessageWithReasoning =
+  OpenAI.Chat.Completions.ChatCompletionMessage & {
+    reasoning: string;
+  };
+
+function hasReasoningContent(
+  message: OpenAI.Chat.Completions.ChatCompletionMessage,
+): message is OpenAIMessageWithReasoning {
+  return (
+    'reasoning' in message &&
+    typeof message.reasoning === 'string' &&
+    message.reasoning !== ''
+  );
+}
+
 /**
  * A model that uses (or is compatible with) OpenAI's Chat Completions API.
  */
@@ -67,7 +84,25 @@ export class OpenAIChatCompletionsModel implements Model {
     const output: protocol.OutputModelItem[] = [];
     if (response.choices && response.choices[0]) {
       const message = response.choices[0].message;
-      if (message.content !== undefined && message.content !== null) {
+
+      if (hasReasoningContent(message)) {
+        output.push({
+          type: 'reasoning',
+          content: [],
+          rawContent: [
+            {
+              type: 'reasoning_text',
+              text: message.reasoning,
+            },
+          ],
+        });
+      }
+      if (
+        message.content !== undefined &&
+        message.content !== null &&
+        // Azure OpenAI returns empty string instead of null for tool calls, causing parser rejection
+        !(message.tool_calls && message.content === '')
+      ) {
         const { content, ...rest } = message;
         output.push({
           id: response.id,
@@ -114,24 +149,27 @@ export class OpenAIChatCompletionsModel implements Model {
         });
       } else if (message.tool_calls) {
         for (const tool_call of message.tool_calls) {
-          const { id: callId, ...remainingToolCallData } = tool_call;
-          const {
-            arguments: args,
-            name,
-            ...remainingFunctionData
-          } = tool_call.function;
-          output.push({
-            id: response.id,
-            type: 'function_call',
-            arguments: args,
-            name: name,
-            callId: callId,
-            status: 'completed',
-            providerData: {
-              ...remainingToolCallData,
-              ...remainingFunctionData,
-            },
-          });
+          if (tool_call.type === 'function') {
+            // Note: custom tools are not supported for now
+            const { id: callId, ...remainingToolCallData } = tool_call;
+            const {
+              arguments: args,
+              name,
+              ...remainingFunctionData
+            } = tool_call.function;
+            output.push({
+              id: response.id,
+              type: 'function_call',
+              arguments: args,
+              name: name,
+              callId: callId,
+              status: 'completed',
+              providerData: {
+                ...remainingToolCallData,
+                ...remainingFunctionData,
+              },
+            });
+          }
         }
       }
     }

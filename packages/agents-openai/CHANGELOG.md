@@ -1,5 +1,104 @@
 # @openai/agents-openai
 
+## 0.1.0
+
+### Patch Changes
+
+- 2260e21: Upgrade openai package to the latest version
+- 47a28ad: Fix a bug where responses api does not accept both outputType and verbosity parameter for gpt-5
+- 42702c0: #366 Add conversations API support
+- ecea142: Fix #374 add connector support
+- 2b10adc: Fix #393 add domain filtering and sources to web search tool & upgrade openai package to the latest version
+- 8fc01fc: Add a quick opt-in option to switch to gpt-5
+- Updated dependencies [2260e21]
+- Updated dependencies [94f606c]
+- Updated dependencies [79a1999]
+- Updated dependencies [42702c0]
+- Updated dependencies [ecea142]
+- Updated dependencies [2b10adc]
+- Updated dependencies [f1e2f60]
+- Updated dependencies [8fc01fc]
+- Updated dependencies [6f1677c]
+  - @openai/agents-core@0.1.0
+
+## 0.0.17
+
+### Patch Changes
+
+- f825f71: Fix #187 Agent outputType type error with zod@3.25.68+
+- 5d247a5: Fix #245 CJS resolution failure
+- Updated dependencies [1cd3266]
+- Updated dependencies [f825f71]
+- Updated dependencies [5d247a5]
+  - @openai/agents-core@0.0.17
+
+## 0.0.16
+
+### Patch Changes
+
+- 1bb4d86: Fix #233 - eliminate confusion with "input_text" type items with role: "assistant"
+- a51105b: Pass through strict flag for function tools when using completion
+- 4818d5e: fix: support snake_case usage fields from OpenAI responses
+- Updated dependencies [1bb4d86]
+- Updated dependencies [4818d5e]
+- Updated dependencies [0858c98]
+- Updated dependencies [4bfd911]
+- Updated dependencies [c42a0a9]
+  - @openai/agents-core@0.0.16
+
+## 0.0.15
+
+### Patch Changes
+
+- 7b437d9: feat: add reasoning handling in chat completions
+- Updated dependencies [5f7d0d6]
+- Updated dependencies [7b437d9]
+- Updated dependencies [b65315f]
+- Updated dependencies [0fe38c0]
+  - @openai/agents-core@0.0.15
+
+## 0.0.14
+
+### Patch Changes
+
+- b6c7e9d: Fix codeInterpreterTool run replay by correctly using container_id from providerData (fixes #253)
+- Updated dependencies [08dd469]
+- Updated dependencies [d9c4ddf]
+- Updated dependencies [fba44d9]
+  - @openai/agents-core@0.0.14
+
+## 0.0.13
+
+### Patch Changes
+
+- Updated dependencies [bd463ef]
+  - @openai/agents-core@0.0.13
+
+## 0.0.12
+
+### Patch Changes
+
+- fe5fb97: Handle function call messages with empty content in Chat Completions
+- ad05c65: fix: if prompt is not specified return undefined - fixes #159
+- 886e25a: Add input_fidelity parameter support to image generation tool
+- 046f8cc: Fix typos across repo
+- 40dc0be: Fix #216 Publicly accessible PDF file URL is not yet supported in the input_file content data
+- Updated dependencies [af73bfb]
+- Updated dependencies [046f8cc]
+- Updated dependencies [ed66acf]
+- Updated dependencies [40dc0be]
+  - @openai/agents-core@0.0.12
+
+## 0.0.11
+
+### Patch Changes
+
+- a153963: Tentative fix for #187 : Lock zod version to <=3.25.67
+- Updated dependencies [a60eabe]
+- Updated dependencies [a153963]
+- Updated dependencies [17077d8]
+  - @openai/agents-core@0.0.11
+
 ## 0.0.10
 
 ### Patch Changes
@@ -59,7 +158,7 @@
 
 ### Patch Changes
 
-- adeb218: Ignore empty tool list when callling LLM
+- adeb218: Ignore empty tool list when calling LLM
 - cbd4deb: feat: handle unknown hosted tools in responses model
 - Updated dependencies [544ed4b]
   - @openai/agents-core@0.0.5

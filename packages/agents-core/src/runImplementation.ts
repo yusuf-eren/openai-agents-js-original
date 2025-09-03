@@ -31,7 +31,7 @@ import { safeExecute } from './utils/safeExecute';
 import { addErrorToCurrentSpan } from './tracing/context';
 import { RunItemStreamEvent, RunItemStreamEventName } from './events';
 import { StreamedRunResult } from './result';
-import { z } from '@openai/zod/v3';
+import { z } from 'zod';
 import { toSmartString } from './utils/smartString';
 import * as protocol from './types/protocol';
 import { Computer } from './computer';
@@ -144,7 +144,7 @@ export function processModelResponse<TContext>(
         });
         if (!mcpServerTool.providerData.on_approval) {
           // When onApproval function exists, it confirms the approval right after this.
-          // Thus, this approval item must be appended only for the next turn interrpution patterns.
+          // Thus, this approval item must be appended only for the next turn interruption patterns.
           items.push(approvalItem);
         }
       }
@@ -573,7 +573,7 @@ export async function executeToolsAndSideEffects<TContext>(
       : undefined;
 
   // if there is no output we just run again
-  if (!potentialFinalOutput) {
+  if (typeof potentialFinalOutput === 'undefined') {
     return new SingleStepResult(
       originalInput,
       newResponse,
@@ -956,7 +956,7 @@ export async function executeHandoffCalls<
 
   if (runHandoffs.length > 1) {
     // multiple handoffs. Ignoring all but the first one by adding reject responses for those
-    const outputMessage = 'Multiple handoffs detected, ignorning this one.';
+    const outputMessage = 'Multiple handoffs detected, ignoring this one.';
     for (let i = 1; i < runHandoffs.length; i++) {
       newStepItems.push(
         new RunToolCallOutputItem(
@@ -1025,6 +1025,7 @@ export async function executeHandoffCalls<
             : originalInput,
           preHandoffItems: [...preStepItems],
           newItems: [...newStepItems],
+          runContext,
         };
 
         const filtered = inputFilter(handoffInputData);

@@ -57,6 +57,7 @@ export { assistant, system, user } from './helpers/message';
 export {
   extractAllTextOutput,
   RunHandoffCallItem,
+  RunHandoffOutputItem,
   RunItem,
   RunMessageOutputItem,
   RunReasoningItem,
@@ -69,10 +70,19 @@ export { getLogger } from './logger';
 export {
   getAllMcpTools,
   invalidateServerToolsCache,
+  mcpToFunctionTool,
   MCPServer,
   MCPServerStdio,
   MCPServerStreamableHttp,
+  MCPServerSSE,
+  GetAllMcpToolsOptions,
 } from './mcp';
+export {
+  MCPToolFilterCallable,
+  MCPToolFilterContext,
+  MCPToolFilterStatic,
+  createMCPToolStaticFilter,
+} from './mcpUtil';
 export {
   Model,
   ModelProvider,
@@ -84,6 +94,13 @@ export {
   SerializedTool,
   SerializedOutputType,
 } from './model';
+export {
+  OPENAI_DEFAULT_MODEL_ENV_VARIABLE_NAME,
+  gpt5ReasoningSettingsRequired,
+  getDefaultModel,
+  getDefaultModelSettings,
+  isGpt5Default,
+} from './defaultModel';
 export { setDefaultModelProvider } from './providers';
 export { RunResult, StreamedRunResult } from './result';
 export {

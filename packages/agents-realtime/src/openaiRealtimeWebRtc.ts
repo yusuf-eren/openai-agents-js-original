@@ -98,7 +98,7 @@ export class OpenAIRealtimeWebRTC
       throw new Error('WebRTC is not supported in this environment');
     }
     super(options);
-    this.#url = options.baseUrl ?? `https://api.openai.com/v1/realtime`;
+    this.#url = options.baseUrl ?? `https://api.openai.com/v1/realtime/calls`;
     this.#useInsecureApiKey = options.useInsecureApiKey ?? false;
   }
 
@@ -152,7 +152,7 @@ export class OpenAIRealtimeWebRTC
     const isClientKey = typeof apiKey === 'string' && apiKey.startsWith('ek_');
     if (isBrowserEnvironment() && !this.#useInsecureApiKey && !isClientKey) {
       throw new UserError(
-        'Using the WebRTC connection in a browser environment requires an insecure API key. Please use a WebSocket connection instead or set the useInsecureApiKey option to true.',
+        'Using the WebRTC connection in a browser environment requires an ephemeral client key. If you need to use a regular API key, use the WebSocket transport or set the `useInsecureApiKey` option to true.',
       );
     }
 
@@ -247,19 +247,11 @@ export class OpenAIRealtimeWebRTC
           throw new Error('Failed to create offer');
         }
 
-        const sessionConfig = {
-          ...this._getMergedSessionConfig(userSessionConfig),
-          model: this.currentModel,
-        };
-
-        const data = new FormData();
-        data.append('sdp', offer.sdp);
-        data.append('session', JSON.stringify(sessionConfig));
-
         const sdpResponse = await fetch(connectionUrl, {
           method: 'POST',
-          body: data,
+          body: offer.sdp,
           headers: {
+            'Content-Type': 'application/sdp',
             Authorization: `Bearer ${apiKey}`,
             'X-OpenAI-Agents-SDK': HEADERS['X-OpenAI-Agents-SDK'],
           },

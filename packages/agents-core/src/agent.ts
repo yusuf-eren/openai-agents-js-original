@@ -1,9 +1,14 @@
-import type { ZodObject } from 'zod/v3';
+import type { ZodObject } from 'zod';
 
 import type { InputGuardrail, OutputGuardrail } from './guardrail';
 import { AgentHooks } from './lifecycle';
 import { getAllMcpTools, type MCPServer } from './mcp';
 import type { Model, ModelSettings, Prompt } from './model';
+import {
+  getDefaultModelSettings,
+  gpt5ReasoningSettingsRequired,
+  isGpt5Default,
+} from './defaultModel';
 import type { RunContext } from './runContext';
 import {
   type FunctionTool,
@@ -34,30 +39,30 @@ export type ToolUseBehaviorFlags = 'run_llm_again' | 'stop_on_first_tool';
 export type ToolsToFinalOutputResult =
   | {
       /**
-       * Wether this is the final output. If `false`, the LLM will run again and receive the tool call output
+       * Whether this is the final output. If `false`, the LLM will run again and receive the tool call output
        */
       isFinalOutput: false;
       /**
-       * Wether the agent was interrupted by a tool approval. If `true`, the LLM will run again and receive the tool call output
+       * Whether the agent was interrupted by a tool approval. If `true`, the LLM will run again and receive the tool call output
        */
       isInterrupted: undefined;
     }
   | {
       isFinalOutput: false;
       /**
-       * Wether the agent was interrupted by a tool approval. If `true`, the LLM will run again and receive the tool call output
+       * Whether the agent was interrupted by a tool approval. If `true`, the LLM will run again and receive the tool call output
        */
       isInterrupted: true;
       interruptions: RunToolApprovalItem[];
     }
   | {
       /**
-       * Wether this is the final output. If `false`, the LLM will run again and receive the tool call output
+       * Whether this is the final output. If `false`, the LLM will run again and receive the tool call output
        */
       isFinalOutput: true;
 
       /**
-       * Wether the agent was interrupted by a tool approval. If `true`, the LLM will run again and receive the tool call output
+       * Whether the agent was interrupted by a tool approval. If `true`, the LLM will run again and receive the tool call output
        */
       isInterrupted: undefined;
 
@@ -165,8 +170,10 @@ export interface AgentConfiguration<
   handoffOutputTypeWarningEnabled?: boolean;
 
   /**
-   * The model implementation to use when invoking the LLM. By default, if not set, the agent will
-   * use the default model configured in modelSettings.defaultModel
+   * The model implementation to use when invoking the LLM.
+   *
+   * By default, if not set, the agent will use the default model returned by
+   * getDefaultModel (currently "gpt-4.1").
    */
   model: string | Model;
 
@@ -212,7 +219,7 @@ export interface AgentConfiguration<
    * This lets you configure how tool use is handled.
    * - run_llm_again: The default behavior. Tools are run, and then the LLM receives the results
    *   and gets to respond.
-   * - stop_on_first_tool: The output of the frist tool call is used as the final output. This means
+   * - stop_on_first_tool: The output of the first tool call is used as the final output. This means
    *   that the LLM does not process the result of the tool call.
    * - A list of tool names: The agent will stop running if any of the tools in the list are called.
    *   The final output will be the output of the first matching tool call. The LLM does not process
@@ -227,7 +234,7 @@ export interface AgentConfiguration<
   toolUseBehavior: ToolUseBehavior;
 
   /**
-   * Wether to reset the tool choice to the default value after a tool has been called. Defaults
+   * Whether to reset the tool choice to the default value after a tool has been called. Defaults
    * to `true`. This ensures that the agent doesn't enter an infinite loop of tool usage.
    */
   resetToolChoice: boolean;
@@ -348,7 +355,7 @@ export class Agent<
     this.handoffDescription = config.handoffDescription ?? '';
     this.handoffs = config.handoffs ?? [];
     this.model = config.model ?? '';
-    this.modelSettings = config.modelSettings ?? {};
+    this.modelSettings = config.modelSettings ?? getDefaultModelSettings();
     this.tools = config.tools ?? [];
     this.mcpServers = config.mcpServers ?? [];
     this.inputGuardrails = config.inputGuardrails ?? [];
@@ -358,6 +365,23 @@ export class Agent<
     }
     this.toolUseBehavior = config.toolUseBehavior ?? 'run_llm_again';
     this.resetToolChoice = config.resetToolChoice ?? true;
+
+    if (
+      // The user sets a non-default model
+      config.model !== undefined &&
+      // The default model is gpt-5
+      isGpt5Default() &&
+      // However, the specified model is not a gpt-5 model
+      (typeof config.model !== 'string' ||
+        !gpt5ReasoningSettingsRequired(config.model)) &&
+      // The model settings are not customized for the specified model
+      config.modelSettings === undefined
+    ) {
+      // In this scenario, we should use a generic model settings
+      // because non-gpt-5 models are not compatible with the default gpt-5 model settings.
+      // This is a best-effort attempt to make the agent work with non-gpt-5 models.
+      this.modelSettings = {};
+    }
 
     // --- Runtime warning for handoff output type compatibility ---
     if (
@@ -383,7 +407,7 @@ export class Agent<
   }
 
   /**
-   * Ouput schema name
+   * Output schema name.
    */
   get outputSchemaName(): string {
     if (this.outputType === 'text') {
@@ -514,9 +538,16 @@ export class Agent<
    * Fetches the available tools from the MCP servers.
    * @returns the MCP powered tools
    */
-  async getMcpTools(): Promise<Tool<TContext>[]> {
+  async getMcpTools(
+    runContext: RunContext<TContext>,
+  ): Promise<Tool<TContext>[]> {
     if (this.mcpServers.length > 0) {
-      return getAllMcpTools(this.mcpServers);
+      return getAllMcpTools({
+        mcpServers: this.mcpServers,
+        runContext,
+        agent: this,
+        convertSchemasToStrict: false,
+      });
     }
 
     return [];
@@ -527,8 +558,10 @@ export class Agent<
    *
    * @returns all configured tools
    */
-  async getAllTools(): Promise<Tool<TContext>[]> {
-    return [...(await this.getMcpTools()), ...this.tools];
+  async getAllTools(
+    runContext: RunContext<TContext>,
+  ): Promise<Tool<TContext>[]> {
+    return [...(await this.getMcpTools(runContext)), ...this.tools];
   }
 
   /**

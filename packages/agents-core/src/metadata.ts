@@ -3,11 +3,10 @@
 
 export const METADATA = {
   "name": "@openai/agents-core",
-  "version": "0.0.7",
+  "version": "0.1.0",
   "versions": {
-    "@openai/agents-core": "0.0.7",
-    "@openai/zod": "npm:zod@^3.25.40",
-    "openai": "^5.0.1"
+    "@openai/agents-core": "0.1.0",
+    "openai": "^5.16.0"
   }
 };
 

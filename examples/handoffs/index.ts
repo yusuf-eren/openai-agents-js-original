@@ -5,6 +5,7 @@ import {
   HandoffInputData,
   handoff,
   withTrace,
+  isGpt5Default,
 } from '@openai/agents';
 import { removeAllTools } from '@openai/agents-core/extensions';
 import { z } from 'zod';
@@ -23,6 +24,12 @@ const randomNumberTool = tool({
 
 // Message filter for handoff (removes tool messages and first two history items)
 function spanishHandoffMessageFilter(handoffMessageData: HandoffInputData) {
+  if (isGpt5Default()) {
+    console.log(
+      'GPT-5 models do not work if you remove the toll call results, so this filter does nothing.',
+    );
+    return handoffMessageData;
+  }
   // Remove all tool-related messages
   return removeAllTools(handoffMessageData);
 }
@@ -71,7 +78,7 @@ async function main() {
     result = await run(secondAgent, [
       ...result.history,
       {
-        content: 'I live in New York City. Whats the population of the city?',
+        content: "I live in New York City. What's the population of the city?",
         role: 'user',
       },
     ]);

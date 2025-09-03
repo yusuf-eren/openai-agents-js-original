@@ -8,7 +8,10 @@ import {
 } from '../src/runState';
 import { RunContext } from '../src/runContext';
 import { Agent } from '../src/agent';
-import { RunToolApprovalItem as ToolApprovalItem } from '../src/items';
+import {
+  RunToolApprovalItem as ToolApprovalItem,
+  RunMessageOutputItem,
+} from '../src/items';
 import { computerTool } from '../src/tool';
 import * as protocol from '../src/types/protocol';
 import { TEST_MODEL_MESSAGE, FakeComputer } from './stubs';
@@ -29,6 +32,32 @@ describe('RunState', () => {
     expect(state._currentStep).toBeUndefined();
     expect(state._trace).toBeNull();
     expect(state._context.context).toEqual({ foo: 'bar' });
+  });
+
+  it('returns history including original input and generated items', () => {
+    const context = new RunContext();
+    const agent = new Agent({ name: 'HistAgent' });
+    const state = new RunState(context, 'input', agent, 1);
+    state._generatedItems.push(
+      new RunMessageOutputItem(TEST_MODEL_MESSAGE, agent),
+    );
+
+    expect(state.history).toEqual([
+      { type: 'message', role: 'user', content: 'input' },
+      TEST_MODEL_MESSAGE,
+    ]);
+  });
+
+  it('preserves history after serialization', async () => {
+    const context = new RunContext();
+    const agent = new Agent({ name: 'HistAgent2' });
+    const state = new RunState(context, 'input', agent, 1);
+    state._generatedItems.push(
+      new RunMessageOutputItem(TEST_MODEL_MESSAGE, agent),
+    );
+
+    const restored = await RunState.fromString(agent, state.toString());
+    expect(restored.history).toEqual(state.history);
   });
 
   it('toJSON and toString produce valid JSON', () => {
@@ -278,7 +307,50 @@ describe('deserialize helpers', () => {
       functions: [],
       handoffs: [],
       computerActions: [{ toolCall: call, computer: tool }],
-      mcpApprovalRequests: [],
+      mcpApprovalRequests: [
+        {
+          requestItem: {
+            rawItem: {
+              type: 'hosted_tool_call',
+              name: 'fetch_generic_url_content',
+              status: 'in_progress',
+              providerData: {
+                id: 'mcpr_685bc3c47ed88192977549b5206db77504d4306d5de6ab36',
+                type: 'mcp_approval_request',
+                arguments:
+                  '{"url":"https://raw.githubusercontent.com/openai/codex/main/README.md"}',
+                name: 'fetch_generic_url_content',
+                server_label: 'gitmcp',
+              },
+            },
+            type: 'tool_approval_item',
+            agent: new Agent({ name: 'foo ' }),
+            toJSON: function (): any {
+              throw new Error('Function not implemented.');
+            },
+          },
+          mcpTool: {
+            type: 'hosted_tool',
+            name: 'hosted_mcp',
+            providerData: {
+              type: 'mcp',
+              server_label: 'gitmcp',
+              server_url: 'https://gitmcp.io/openai/codex',
+              require_approval: {
+                always: {
+                  tool_names: ['fetch_generic_url_content'],
+                },
+                never: {
+                  tool_names: [
+                    'search_codex_code',
+                    'fetch_codex_documentation',
+                  ],
+                },
+              },
+            },
+          },
+        },
+      ],
       toolsUsed: [],
       hasToolsOrApprovalsToRun: () => true,
     };
@@ -292,5 +364,15 @@ describe('deserialize helpers', () => {
     if (restored._currentStep?.type === 'next_step_handoff') {
       expect(restored._currentStep.newAgent).toBe(agent);
     }
+    expect(
+      restored._lastProcessedResponse?.mcpApprovalRequests[0].mcpTool,
+    ).toEqual(state._lastProcessedResponse?.mcpApprovalRequests[0].mcpTool);
+    expect(
+      restored._lastProcessedResponse?.mcpApprovalRequests[0].requestItem
+        .rawItem.providerData,
+    ).toEqual(
+      state._lastProcessedResponse?.mcpApprovalRequests[0].requestItem.rawItem
+        .providerData,
+    );
   });
 });

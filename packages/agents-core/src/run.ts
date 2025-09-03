@@ -54,6 +54,7 @@ import { RunAgentUpdatedStreamEvent, RunRawModelStreamEvent } from './events';
 import { RunState } from './runState';
 import { StreamEventResponseCompleted } from './types/protocol';
 import { convertAgentOutputTypeToSerializable } from './utils/tools';
+import { gpt5ReasoningSettingsRequired, isGpt5Default } from './defaultModel';
 
 const DEFAULT_MAX_TURNS = 10;
 
@@ -135,6 +136,7 @@ type SharedRunOptions<TContext = undefined> = {
   maxTurns?: number;
   signal?: AbortSignal;
   previousResponseId?: string;
+  conversationId?: string;
 };
 
 export type StreamRunOptions<TContext = undefined> =
@@ -253,6 +255,10 @@ export class Runner extends RunHooks<any, AgentOutputType<unknown>> {
 
       try {
         while (true) {
+          const explictlyModelSet =
+            (state._currentAgent.model !== undefined &&
+              state._currentAgent.model !== '') ||
+            (this.config.model !== undefined && this.config.model !== '');
           let model = selectModel(state._currentAgent.model, this.config.model);
 
           if (typeof model === 'string') {
@@ -322,7 +328,7 @@ export class Runner extends RunHooks<any, AgentOutputType<unknown>> {
               setCurrentSpan(state._currentAgentSpan);
             }
 
-            const tools = await state._currentAgent.getAllTools();
+            const tools = await state._currentAgent.getAllTools(state._context);
             const serializedTools = tools.map((t) => serializeTool(t));
             const serializedHandoffs = handoffs.map((h) => serializeHandoff(h));
             if (state._currentAgentSpan) {
@@ -369,6 +375,13 @@ export class Runner extends RunHooks<any, AgentOutputType<unknown>> {
               ...this.config.modelSettings,
               ...state._currentAgent.modelSettings,
             };
+            const agentModelSettings = state._currentAgent.modelSettings;
+            modelSettings = adjustModelSettingsForNonGPT5RunnerModel(
+              explictlyModelSet,
+              agentModelSettings,
+              model,
+              modelSettings,
+            );
             modelSettings = maybeResetToolChoice(
               state._currentAgent,
               state._toolUseTracker,
@@ -381,6 +394,7 @@ export class Runner extends RunHooks<any, AgentOutputType<unknown>> {
               prompt: await state._currentAgent.getPrompt(state._context),
               input: turnInput,
               previousResponseId: options.previousResponseId,
+              conversationId: options.conversationId,
               modelSettings,
               tools: serializedTools,
               outputType: convertAgentOutputTypeToSerializable(
@@ -615,7 +629,7 @@ export class Runner extends RunHooks<any, AgentOutputType<unknown>> {
       while (true) {
         const currentAgent = result.state._currentAgent;
         const handoffs = currentAgent.handoffs.map(getHandoff);
-        const tools = await currentAgent.getAllTools();
+        const tools = await currentAgent.getAllTools(result.state._context);
         const serializedTools = tools.map((t) => serializeTool(t));
         const serializedHandoffs = handoffs.map((h) => serializeHandoff(h));
 
@@ -695,6 +709,9 @@ export class Runner extends RunHooks<any, AgentOutputType<unknown>> {
             `Running agent ${currentAgent.name} (turn ${result.state._currentTurn})`,
           );
 
+          const explictlyModelSet =
+            (currentAgent.model !== undefined && currentAgent.model !== '') ||
+            (this.config.model !== undefined && this.config.model !== '');
           let model = selectModel(currentAgent.model, this.config.model);
 
           if (typeof model === 'string') {
@@ -709,6 +726,13 @@ export class Runner extends RunHooks<any, AgentOutputType<unknown>> {
             ...this.config.modelSettings,
             ...currentAgent.modelSettings,
           };
+          const agentModelSettings = currentAgent.modelSettings;
+          modelSettings = adjustModelSettingsForNonGPT5RunnerModel(
+            explictlyModelSet,
+            agentModelSettings,
+            model,
+            modelSettings,
+          );
           modelSettings = maybeResetToolChoice(
             currentAgent,
             result.state._toolUseTracker,
@@ -735,6 +759,7 @@ export class Runner extends RunHooks<any, AgentOutputType<unknown>> {
             prompt: await currentAgent.getPrompt(result.state._context),
             input: turnInput,
             previousResponseId: options.previousResponseId,
+            conversationId: options.conversationId,
             modelSettings,
             tools: serializedTools,
             handoffs: serializedHandoffs,
@@ -767,7 +792,7 @@ export class Runner extends RunHooks<any, AgentOutputType<unknown>> {
 
           if (!finalResponse) {
             throw new ModelBehaviorError(
-              'Model did not procude a final response!',
+              'Model did not produce a final response!',
               result.state,
             );
           }
@@ -810,6 +835,17 @@ export class Runner extends RunHooks<any, AgentOutputType<unknown>> {
             result.state,
             result.state._currentStep.output,
           );
+          this.emit(
+            'agent_end',
+            result.state._context,
+            currentAgent,
+            result.state._currentStep.output,
+          );
+          currentAgent.emit(
+            'agent_end',
+            result.state._context,
+            result.state._currentStep.output,
+          );
           return;
         } else if (
           result.state._currentStep.type === 'next_step_interruption'
@@ -824,7 +860,9 @@ export class Runner extends RunHooks<any, AgentOutputType<unknown>> {
             resetCurrentSpan();
           }
           result.state._currentAgentSpan = undefined;
-          result._addItem(new RunAgentUpdatedStreamEvent(currentAgent));
+          result._addItem(
+            new RunAgentUpdatedStreamEvent(result.state._currentAgent),
+          );
           result.state._noActiveAgentRun = true;
 
           // we've processed the handoff, so we need to run the loop again
@@ -1026,4 +1064,36 @@ export async function run<TAgent extends Agent<any, any>, TContext = undefined>(
   } else {
     return await runner.run(agent, input, options);
   }
+}
+
+/**
+ * When the default model is a GPT-5 variant, agents may carry GPT-5-specific providerData
+ * (e.g., reasoning effort, text verbosity). If a run resolves to a non-GPT-5 model and the
+ * agent relied on the default model (i.e., no explicit model set), these GPT-5-only settings
+ * are incompatible and should be stripped to avoid runtime errors.
+ */
+function adjustModelSettingsForNonGPT5RunnerModel(
+  explictlyModelSet: boolean,
+  agentModelSettings: ModelSettings,
+  runnerModel: string | Model,
+  modelSettings: ModelSettings,
+): ModelSettings {
+  if (
+    // gpt-5 is enabled for the default model for agents
+    isGpt5Default() &&
+    // explicitly set model for the agent
+    explictlyModelSet &&
+    // this runner uses a non-gpt-5 model
+    (typeof runnerModel !== 'string' ||
+      !gpt5ReasoningSettingsRequired(runnerModel)) &&
+    (agentModelSettings.providerData?.reasoning ||
+      agentModelSettings.providerData?.text?.verbosity ||
+      (agentModelSettings.providerData as any)?.reasoning_effort)
+  ) {
+    // the incompatible parameters should be removed to avoid runtime errors
+    delete modelSettings.providerData?.reasoning;
+    delete (modelSettings.providerData as any)?.text?.verbosity;
+    delete (modelSettings.providerData as any)?.reasoning_effort;
+  }
+  return modelSettings;
 }

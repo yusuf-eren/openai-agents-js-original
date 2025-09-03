@@ -34,6 +34,11 @@ export type HandoffInputData = {
    * handoff and the tool output message representing the response from the handoff output.
    */
   newItems: RunItem[];
+  /**
+   * The context of the handoff.
+   * Note that, since this property was added later on, it's optional to pass from users.
+   */
+  runContext?: RunContext<any>;
 };
 
 export type HandoffInputFilter = (input: HandoffInputData) => HandoffInputData;
@@ -119,7 +124,7 @@ export class Handoff<
   /**
    * The function that invokes the handoff. The parameters passed are:
    * 1. The handoff run context
-   * 2. The arugments from the LLM, as a JSON string. Empty string if inputJsonSchema is empty.
+   * 2. The arguments from the LLM, as a JSON string. Empty string if inputJsonSchema is empty.
    *
    * Must return an agent
    */

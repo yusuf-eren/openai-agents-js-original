@@ -2,35 +2,26 @@
   "name": "@openai/agents",
   "repository": "https://github.com/openai/openai-agents-js",
   "homepage": "https://openai.github.io/openai-agents-js/",
-  "version": "0.0.10",
+  "version": "0.1.0",
   "description": "The OpenAI Agents SDK is a lightweight yet powerful framework for building multi-agent workflows.",
   "author": "OpenAI <support@openai.com>",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
-      "require": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
-      },
       "types": "./dist/index.d.ts",
-      "default": "./dist/index.mjs"
+      "require": "./dist/index.js",
+      "import": "./dist/index.mjs"
     },
     "./realtime": {
-      "require": {
-        "types": "./dist/realtime/index.d.ts",
-        "default": "./dist/realtime/index.js"
-      },
       "types": "./dist/realtime/index.d.ts",
-      "default": "./dist/realtime/index.mjs"
+      "require": "./dist/realtime/index.js",
+      "import": "./dist/realtime/index.mjs"
     },
     "./utils": {
-      "require": {
-        "types": "./dist/utils/index.d.ts",
-        "default": "./dist/utils/index.js"
-      },
       "types": "./dist/utils/index.d.ts",
-      "default": "./dist/utils/index.mjs"
+      "require": "./dist/utils/index.js",
+      "import": "./dist/utils/index.mjs"
     }
   },
   "scripts": {
@@ -42,8 +33,8 @@
     "@openai/agents-core": "workspace:*",
     "@openai/agents-openai": "workspace:*",
     "@openai/agents-realtime": "workspace:*",
-    "openai": "^5.0.1",
-    "debug": "^4.4.0"
+    "debug": "^4.4.0",
+    "openai": "^5.16.0"
   },
   "keywords": [
     "openai",
@@ -53,7 +44,11 @@
   ],
   "license": "MIT",
   "devDependencies": {
-    "@types/debug": "^4.1.12"
+    "@types/debug": "^4.1.12",
+    "zod": "^3.25.40"
+  },
+  "peerDependencies": {
+    "zod": "^3.25.40"
   },
   "files": [
     "dist"
