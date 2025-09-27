@@ -11,6 +11,7 @@
     "docs:dev": "pnpm -F docs dev",
     "docs:translate": "pnpm -F docs translate",
     "docs:build": "pnpm -F docs build",
+    "docs:scripts:check": "pnpm exec tsc --pretty false --project docs/tsconfig.scripts.json",
     "test": "CI=1 NODE_ENV=test vitest",
     "test:coverage": "NODE_ENV=test vitest run --coverage",
     "test:examples": "pnpm -r build-check",
