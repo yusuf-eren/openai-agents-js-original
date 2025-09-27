@@ -348,7 +348,7 @@ You must return **only** the translated markdown. Do not include any commentary,
 
 *(applies only when ${targetLanguage} = Korean)*  
 - 영문 식별자, 코드, 약어 주변의 공백은 원문을 유지하고 임의로 추가하거나 삭제하지 마세요.  
-- 마크다운 강조 표식 주변에 불필요한 공백을 넣지 마세요: `**굵게**` (good) vs `** 굵게 **` (bad).
+- 마크다운 강조 표식 주변에 불필요한 공백을 넣지 마세요: **굵게** (good) vs ** 굵게 ** (bad).
 
 #########################
 ##  DO NOT TRANSLATE   ##
@@ -486,7 +486,7 @@ You must return **only** the translated markdown. Do not include any commentary,
 
 *(applies only when ${targetLanguage} = Korean)*  
 - 영문 식별자, 코드, 약어 주변의 공백은 원문을 유지하고 임의로 추가하거나 삭제하지 마세요.  
-- 마크다운 강조 표식 주변에 불필요한 공백을 넣지 마세요: `**굵게**` (good) vs `** 굵게 **` (bad).
+- 마크다운 강조 표식 주변에 불필요한 공백을 넣지 마세요: **굵게** (good) vs ** 굵게 ** (bad).
 
 #########################
 ##  DO NOT TRANSLATE   ##
