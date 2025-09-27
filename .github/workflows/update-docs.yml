@@ -7,6 +7,8 @@ on:
     paths:
       - 'docs/src/content/**'
       - '!docs/src/content/docs/ja/**'
+      - '!docs/src/content/docs/zh/**'
+      - '!docs/src/content/docs/ko/**'
 
 permissions:
   contents: write
