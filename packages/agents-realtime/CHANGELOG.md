@@ -1,5 +1,71 @@
 # @openai/agents-realtime
 
+## 0.1.7
+
+### Patch Changes
+
+- 0fd8b6e: feat: #478 add isEnabled to handoffs & agents as tools
+- 926bc13: fix: #494 Voice input transcription failing in realtime-demo
+- Updated dependencies [becabb9]
+- Updated dependencies [0fd8b6e]
+- Updated dependencies [be686e9]
+- Updated dependencies [74a6ca3]
+  - @openai/agents-core@0.1.7
+
+## 0.1.6
+
+### Patch Changes
+
+- Updated dependencies [3115177]
+- Updated dependencies [8516799]
+  - @openai/agents-core@0.1.6
+
+## 0.1.5
+
+### Patch Changes
+
+- 2dfb4fd: feat: add factory-based Cloudflare support.
+  - Realtime (WebSocket): add `createWebSocket` and `skipOpenEventListeners` options to enable
+    custom socket creation and connection state control for specialized runtimes.
+  - Extensions: add `CloudflareRealtimeTransportLayer`, which performs a `fetch()`-based WebSocket
+    upgrade on Cloudflare/workerd and integrates via the WebSocket factory.
+
+## 0.1.4
+
+### Patch Changes
+
+- 18fd902: fix: #495 Realtime session config falls back to legacy format when voice is set
+- 1d4984b: Realtime: expose Call ID in OpenAIRealtimeWebRTC
+- Updated dependencies [5f4e139]
+- Updated dependencies [9147a6a]
+  - @openai/agents-core@0.1.4
+
+## 0.1.3
+
+### Patch Changes
+
+- Updated dependencies [74dd52e]
+  - @openai/agents-core@0.1.3
+
+## 0.1.2
+
+### Patch Changes
+
+- Updated dependencies [01fad84]
+- Updated dependencies [3d652e8]
+  - @openai/agents-core@0.1.2
+
+## 0.1.1
+
+### Patch Changes
+
+- b4d315b: feat: Fix #412 add optional details data to function tool execution
+- 1cb6188: fix: allow setting an initial tracing configuration for Realtime
+- Updated dependencies [b4d315b]
+- Updated dependencies [a1c43dd]
+- Updated dependencies [2c43bcc]
+  - @openai/agents-core@0.1.1
+
 ## 0.1.0
 
 ### Minor Changes

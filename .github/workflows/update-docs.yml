@@ -1,5 +1,19 @@
 name: "Update Translated Docs"
 
+# To add more languages, you will update the following:
+#
+# 1. Update this file
+#   - Add '!docs/src/content/docs/{lang}/**' to `on.push.paths`
+#
+# 2. Update docs/astro.config.mjs
+#   - Add the new language to `plugins.starlightLlmsTxt.exclude` array
+#   - Update `translations` for `sidebar`'s items
+#   - Add the new language to `integrations.starlight.locales` array
+#
+# 3. Update docs/src/scripts/translate.ts
+#   - Various updates for the new language
+#
+
 on:
   push:
     branches:
@@ -7,6 +21,12 @@ on:
     paths:
       - 'docs/src/content/**'
       - '!docs/src/content/docs/ja/**'
+      - '!docs/src/content/docs/zh/**'
+      - '!docs/src/content/docs/ko/**'
+
+permissions:
+  contents: write
+  pull-requests: write
 
 jobs:
   update-docs:
@@ -20,7 +40,7 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 10.15.0
+          version: 10.17.1
           run_install: false
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -60,6 +80,10 @@ jobs:
         with:
           commit-message: "Update all translated document pages"
           title: "Update all translated document pages"
-          body: "Automated update of translated documentation"
+          body: |
+            Automated update of translated documentation.
+
+            Triggered by commit: [${{ github.event.head_commit.id }}](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.event.head_commit.id }}).
+            Message: `${{ github.event.head_commit.message }}`
           branch: update-translated-docs-${{ github.run_id }}
           delete-branch: true

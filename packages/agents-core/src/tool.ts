@@ -1,3 +1,4 @@
+import type { Agent } from './agent';
 import type { Computer } from './computer';
 import type { infer as zInfer, ZodObject } from 'zod';
 import {
@@ -11,12 +12,14 @@ import { toFunctionToolName } from './utils/tools';
 import { getSchemaAndParserFromInputType } from './utils/tools';
 import { isZodObject } from './utils/typeGuards';
 import { RunContext } from './runContext';
+import type { RunResult } from './result';
 import { ModelBehaviorError, UserError } from './errors';
 import logger from './logger';
 import { getCurrentSpan } from './tracing';
 import { RunToolApprovalItem, RunToolCallOutputItem } from './items';
 import { toSmartString } from './utils/smartString';
 import * as ProviderData from './types/providerData';
+import * as protocol from './types/protocol';
 
 /**
  * A function that determines if a tool call should be approved.
@@ -31,6 +34,20 @@ export type ToolApprovalFunction<TParameters extends ToolInputParameters> = (
   input: ToolExecuteArgument<TParameters>,
   callId?: string,
 ) => Promise<boolean>;
+
+export type ToolEnabledFunction<Context = UnknownContext> = (
+  runContext: RunContext<Context>,
+  agent: Agent<any, any>,
+) => Promise<boolean>;
+
+type ToolEnabledPredicate<Context = UnknownContext> = (args: {
+  runContext: RunContext<Context>;
+  agent: Agent<any, any>;
+}) => boolean | Promise<boolean>;
+
+type ToolEnabledOption<Context = UnknownContext> =
+  | boolean
+  | ToolEnabledPredicate<Context>;
 
 /**
  * Exposes a function to the agent as a tool to be called
@@ -67,6 +84,7 @@ export type FunctionTool<
   invoke: (
     runContext: RunContext<Context>,
     input: string,
+    details?: { toolCall: protocol.FunctionCallItem },
   ) => Promise<string | Result>;
 
   /**
@@ -74,6 +92,11 @@ export type FunctionTool<
    * program has to resolve by approving or rejecting the tool call.
    */
   needsApproval: ToolApprovalFunction<TParameters>;
+
+  /**
+   * Determines whether the tool should be made available to the model for the current run.
+   */
+  isEnabled: ToolEnabledFunction<Context>;
 };
 
 /**
@@ -309,6 +332,16 @@ export type FunctionToolResult<
        * The run item representing the tool call output.
        */
       runItem: RunToolCallOutputItem;
+      /**
+       * The result returned when the tool execution runs another agent. Populated when the
+       * invocation originated from {@link Agent.asTool} and the nested agent completed a run.
+       */
+      agentRunResult?: RunResult<Context, Agent<Context, any>>;
+      /**
+       * Any interruptions collected while the nested agent executed. These are surfaced to allow
+       * callers to pause and resume workflows that require approvals.
+       */
+      interruptions?: RunToolApprovalItem[];
     }
   | {
       /**
@@ -411,6 +444,7 @@ type ToolExecuteFunction<
 > = (
   input: ToolExecuteArgument<TParameters>,
   context?: RunContext<Context>,
+  details?: { toolCall: protocol.FunctionCallItem },
 ) => Promise<unknown> | unknown;
 
 /**
@@ -486,6 +520,11 @@ type StrictToolOptions<
    * program has to resolve by approving or rejecting the tool call.
    */
   needsApproval?: boolean | ToolApprovalFunction<TParameters>;
+
+  /**
+   * Determines whether the tool should be exposed to the model for the current run.
+   */
+  isEnabled?: ToolEnabledOption<Context>;
 };
 
 /**
@@ -533,6 +572,11 @@ type NonStrictToolOptions<
    * program has to resolve by approving or rejecting the tool call.
    */
   needsApproval?: boolean | ToolApprovalFunction<TParameters>;
+
+  /**
+   * Determines whether the tool should be exposed to the model for the current run.
+   */
+  isEnabled?: ToolEnabledOption<Context>;
 };
 
 /**
@@ -591,6 +635,7 @@ export function tool<
   async function _invoke(
     runContext: RunContext<Context>,
     input: string,
+    details?: { toolCall: protocol.FunctionCallItem },
   ): Promise<Result> {
     const [error, parsed] = await safeExecute(() => parser(input));
     if (error !== null) {
@@ -608,7 +653,7 @@ export function tool<
       logger.debug(`Invoking tool ${name} with input ${input}`);
     }
 
-    const result = await options.execute(parsed, runContext);
+    const result = await options.execute(parsed, runContext, details);
     const stringResult = toSmartString(result);
 
     if (logger.dontLogToolData) {
@@ -623,8 +668,9 @@ export function tool<
   async function invoke(
     runContext: RunContext<Context>,
     input: string,
+    details?: { toolCall: protocol.FunctionCallItem },
   ): Promise<string | Result> {
-    return _invoke(runContext, input).catch<string>((error) => {
+    return _invoke(runContext, input, details).catch<string>((error) => {
       if (toolErrorFunction) {
         const currentSpan = getCurrentSpan();
         currentSpan?.setError({
@@ -649,6 +695,16 @@ export function tool<
             ? options.needsApproval
             : false;
 
+  const isEnabled: ToolEnabledFunction<Context> =
+    typeof options.isEnabled === 'function'
+      ? async (runContext, agent) => {
+          const predicate = options.isEnabled as ToolEnabledPredicate<Context>;
+          const result = await predicate({ runContext, agent });
+          return Boolean(result);
+        }
+      : async () =>
+          typeof options.isEnabled === 'boolean' ? options.isEnabled : true;
+
   return {
     type: 'function',
     name,
@@ -657,6 +713,7 @@ export function tool<
     strict: strictMode,
     invoke,
     needsApproval,
+    isEnabled,
   };
 }
 

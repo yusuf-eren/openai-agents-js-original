@@ -1,5 +1,53 @@
 # @openai/agents-core
 
+## 0.1.7
+
+### Patch Changes
+
+- becabb9: fix: #247 logging for a sub-agent w/ stopAtToolNames
+- 0fd8b6e: feat: #478 add isEnabled to handoffs & agents as tools
+- be686e9: feat(mcp): add structuredContent support behind `useStructuredContent`; return full CallToolResult from `callTool`
+  - `MCPServer#callTool` now returns the full `CallToolResult` (was `content[]`), exposing optional `structuredContent`.
+  - Add `useStructuredContent` option to MCP servers (stdio/streamable-http/SSE), default `false` to avoid duplicate data by default.
+  - When enabled, function tool outputs return JSON strings for consistency with Python SDK implementation.
+
+- 74a6ca3: fix: #526 separate tool_call_item and tool_call_output_item in stream events
+
+## 0.1.6
+
+### Patch Changes
+
+- 3115177: Add typed reasoning / text options to ModelSettings
+- 8516799: fix(randomUUID): add fallback when crypto.randomUUID is unavailable
+
+## 0.1.4
+
+### Patch Changes
+
+- 5f4e139: fix: #485 Abort during streaming throws “ReadableStream is locked” in StreamedRunResult
+- 9147a6a: feat: #460 Enable to customize the internal runner for an agent as tool
+
+## 0.1.3
+
+### Patch Changes
+
+- 74dd52e: fix: #473 upgrade openai package to the latest and fix breaking errors
+
+## 0.1.2
+
+### Patch Changes
+
+- 01fad84: Fix #243 by enabling unified HITL interruptions from both agents and their agents as tools
+- 3d652e8: fix: delay final output until tools complete
+
+## 0.1.1
+
+### Patch Changes
+
+- b4d315b: feat: Fix #412 add optional details data to function tool execution
+- a1c43dd: feat: enable mcp exports for cloudflare workers
+- 2c43bcc: fix: #417 ensure BrowserEventEmitter off removes listeners
+
 ## 0.1.0
 
 ### Minor Changes

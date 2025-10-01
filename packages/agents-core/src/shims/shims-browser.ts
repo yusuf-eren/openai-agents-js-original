@@ -16,16 +16,30 @@ export class BrowserEventEmitter<
 > implements EventEmitter<EventTypes>
 {
   #target = new EventTarget();
+  #listenerWrappers = new Map<
+    string,
+    Map<(...args: EventTypes[any]) => void, Set<EventListener>>
+  >();
 
   on<K extends keyof EventTypes>(
     type: K,
     listener: (...args: EventTypes[K]) => void,
   ) {
-    this.#target.addEventListener(
-      type as string,
-      ((event: CustomEvent) =>
-        listener(...(event.detail ?? []))) as EventListener,
-    );
+    const eventType = type as string;
+    let listenersForType = this.#listenerWrappers.get(eventType);
+    if (!listenersForType) {
+      listenersForType = new Map();
+      this.#listenerWrappers.set(eventType, listenersForType);
+    }
+    let wrappers = listenersForType.get(listener);
+    if (!wrappers) {
+      wrappers = new Set();
+      listenersForType.set(listener, wrappers);
+    }
+    const wrapper = ((event: CustomEvent) =>
+      listener(...(event.detail ?? []))) as EventListener;
+    wrappers.add(wrapper);
+    this.#target.addEventListener(eventType, wrapper);
     return this;
   }
 
@@ -33,11 +47,18 @@ export class BrowserEventEmitter<
     type: K,
     listener: (...args: EventTypes[K]) => void,
   ) {
-    this.#target.removeEventListener(
-      type as string,
-      ((event: CustomEvent) =>
-        listener(...(event.detail ?? []))) as EventListener,
-    );
+    const eventType = type as string;
+    const listenersForType = this.#listenerWrappers.get(eventType);
+    const wrappers = listenersForType?.get(listener);
+    if (wrappers?.size) {
+      for (const wrapper of wrappers) {
+        this.#target.removeEventListener(eventType, wrapper);
+      }
+      listenersForType?.delete(listener);
+      if (listenersForType?.size === 0) {
+        this.#listenerWrappers.delete(eventType);
+      }
+    }
     return this;
   }
 
@@ -61,7 +82,20 @@ export class BrowserEventEmitter<
 
 export { BrowserEventEmitter as RuntimeEventEmitter };
 
-export const randomUUID = crypto.randomUUID.bind(crypto);
+export const randomUUID: () => `${string}-${string}-${string}-${string}-${string}` =
+  () => {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(
+      /[xy]/g,
+      function (c) {
+        const r = (Math.random() * 16) | 0;
+        const v = c === 'x' ? r : (r & 0x3) | 0x8;
+        return v.toString(16);
+      },
+    ) as `${string}-${string}-${string}-${string}-${string}`;
+  };
 export const Readable = class Readable {
   constructor() {}
   pipeTo(

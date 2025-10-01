@@ -87,7 +87,7 @@ const plugins = [
         paths: ['api/**'],
       },
     ],
-    exclude: ['ja/**'],
+    exclude: ['ja/**', 'zh/**', 'ko/**'],
   }),
 ];
 
@@ -97,6 +97,8 @@ const sidebar = [
     link: '/',
     translations: {
       ja: '概要',
+      zh: '概述',
+      ko: '개요',
     },
   },
   {
@@ -104,12 +106,16 @@ const sidebar = [
     link: '/guides/quickstart',
     translations: {
       ja: 'クイックスタート',
+      zh: '快速开始',
+      ko: '빠른 시작',
     },
   },
   {
     label: 'Guides',
     translations: {
       ja: 'ガイド',
+      zh: '指南',
+      ko: '가이드',
     },
     items: [
       {
@@ -117,6 +123,8 @@ const sidebar = [
         link: '/guides/agents',
         translations: {
           ja: 'エージェント',
+          zh: '智能体',
+          ko: '에이전트',
         },
       },
       {
@@ -124,6 +132,8 @@ const sidebar = [
         link: '/guides/running-agents',
         translations: {
           ja: 'エージェントの実行',
+          zh: '运行智能体',
+          ko: '에이전트 실행',
         },
       },
       {
@@ -131,6 +141,8 @@ const sidebar = [
         link: '/guides/results',
         translations: {
           ja: 'エージェントの実行結果',
+          zh: '执行结果',
+          ko: '실행 결과',
         },
       },
       {
@@ -138,6 +150,8 @@ const sidebar = [
         link: '/guides/tools',
         translations: {
           ja: 'ツール',
+          zh: '工具',
+          ko: '도구',
         },
       },
       {
@@ -145,6 +159,8 @@ const sidebar = [
         link: '/guides/multi-agent',
         translations: {
           ja: 'マルチエージェント',
+          zh: '多智能体编排',
+          ko: '멀티 에이전트 오케스트레이션',
         },
       },
       {
@@ -152,6 +168,8 @@ const sidebar = [
         link: '/guides/handoffs',
         translations: {
           ja: 'ハンドオフ',
+          zh: '交接',
+          ko: '핸드오프',
         },
       },
       {
@@ -159,6 +177,8 @@ const sidebar = [
         link: '/guides/context',
         translations: {
           ja: 'コンテキスト管理',
+          zh: '上下文管理',
+          ko: '컨텍스트 관리',
         },
       },
       {
@@ -166,6 +186,8 @@ const sidebar = [
         link: '/guides/models',
         translations: {
           ja: 'モデル',
+          zh: '模型',
+          ko: '모델',
         },
       },
       {
@@ -173,6 +195,8 @@ const sidebar = [
         link: '/guides/guardrails',
         translations: {
           ja: 'ガードレール',
+          zh: '护栏',
+          ko: '가드레일',
         },
       },
       {
@@ -180,6 +204,8 @@ const sidebar = [
         link: '/guides/streaming',
         translations: {
           ja: 'ストリーミング',
+          zh: '流式传输',
+          ko: '스트리밍',
         },
       },
       {
@@ -187,6 +213,8 @@ const sidebar = [
         link: '/guides/human-in-the-loop',
         translations: {
           ja: '人間の介入（HITL）',
+          zh: '人机协作',
+          ko: '휴먼 인 더 루프 (HITL)',
         },
       },
       {
@@ -194,6 +222,8 @@ const sidebar = [
         link: '/guides/mcp',
         translations: {
           ja: 'MCP 連携',
+          zh: 'MCP 集成',
+          ko: '모델 컨텍스트 프로토콜 (MCP)',
         },
       },
       {
@@ -201,6 +231,8 @@ const sidebar = [
         link: '/guides/tracing',
         translations: {
           ja: 'トレーシング',
+          zh: '追踪',
+          ko: '트레이싱',
         },
       },
       {
@@ -208,6 +240,8 @@ const sidebar = [
         link: '/guides/config',
         translations: {
           ja: 'SDK の設定',
+          zh: 'SDK 配置',
+          ko: 'SDK 설정',
         },
       },
       {
@@ -215,6 +249,8 @@ const sidebar = [
         link: '/guides/troubleshooting',
         translations: {
           ja: 'トラブルシューティング',
+          zh: '故障排除',
+          ko: '문제 해결',
         },
       },
       {
@@ -222,6 +258,8 @@ const sidebar = [
         link: '/guides/release',
         translations: {
           ja: 'リリースプロセス',
+          zh: '发布流程',
+          ko: '릴리스 프로세스',
         },
       },
     ],
@@ -230,6 +268,8 @@ const sidebar = [
     label: 'Voice Agents',
     translations: {
       ja: '音声エージェント',
+      zh: '语音智能体',
+      ko: '음성 에이전트',
     },
     items: [
       {
@@ -237,6 +277,8 @@ const sidebar = [
         link: '/guides/voice-agents',
         translations: {
           ja: '音声エージェントの概要',
+          zh: '语音智能体概述',
+          ko: '음성 에이전트 개요',
         },
       },
       {
@@ -244,6 +286,8 @@ const sidebar = [
         link: '/guides/voice-agents/quickstart',
         translations: {
           ja: 'クイックスタート',
+          zh: '快速开始',
+          ko: '빠른 시작',
         },
       },
       {
@@ -251,6 +295,8 @@ const sidebar = [
         link: '/guides/voice-agents/build',
         translations: {
           ja: '音声エージェントの構築',
+          zh: '构建语音智能体',
+          ko: '음성 에이전트 구축',
         },
       },
       {
@@ -258,6 +304,8 @@ const sidebar = [
         link: '/guides/voice-agents/transport',
         translations: {
           ja: 'リアルタイムトランスポート',
+          zh: '传输机制',
+          ko: '전송 방식',
         },
       },
     ],
@@ -266,6 +314,8 @@ const sidebar = [
     label: 'Extensions',
     translations: {
       ja: '拡張機能',
+      zh: '扩展',
+      ko: '확장 기능',
     },
     items: [
       {
@@ -273,6 +323,8 @@ const sidebar = [
         link: '/extensions/ai-sdk',
         translations: {
           ja: 'AI SDK で任意モデルを指定',
+          zh: '使用 AI SDK 指定任意模型',
+          ko: 'AI SDK로 어떤 모델이든 사용',
         },
       },
       {
@@ -280,6 +332,17 @@ const sidebar = [
         link: '/extensions/twilio',
         translations: {
           ja: 'Realtime Agent を Twilio に接続',
+          zh: '将实时智能体连接到 Twilio',
+          ko: 'Realtime 에이전트를 Twilio에 연결',
+        },
+      },
+      {
+        label: 'Cloudflare Workers Transport',
+        link: '/extensions/cloudflare',
+        translations: {
+          ja: 'Cloudflare Workers 用トランスポート',
+          zh: 'Cloudflare Workers 传输',
+          ko: 'Cloudflare Workers 전송',
         },
       },
     ],
@@ -288,6 +351,8 @@ const sidebar = [
     label: 'API Reference',
     translations: {
       ja: 'APIリファレンス',
+      zh: 'API 参考',
+      ko: 'API 레퍼런스',
     },
     collapsed: false,
     items: [
@@ -349,6 +414,14 @@ export default defineConfig({
         ja: {
           label: '日本語',
           lang: 'ja',
+        },
+        zh: {
+          label: '中文',
+          lang: 'zh',
+        },
+        ko: {
+          label: '한국어',
+          lang: 'ko',
         },
       },
       social: [

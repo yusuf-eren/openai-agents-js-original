@@ -1,4 +1,5 @@
 import type { ZodObject } from 'zod';
+import { z } from 'zod';
 
 import type { InputGuardrail, OutputGuardrail } from './guardrail';
 import { AgentHooks } from './lifecycle';
@@ -15,6 +16,8 @@ import {
   type FunctionToolResult,
   tool,
   type Tool,
+  type ToolApprovalFunction,
+  type ToolEnabledFunction,
 } from './tool';
 import type {
   ResolvedAgentOutput,
@@ -23,8 +26,8 @@ import type {
   Expand,
 } from './types';
 import type { RunResult } from './result';
-import type { Handoff } from './handoff';
-import { Runner } from './run';
+import { getHandoff, type Handoff } from './handoff';
+import { NonStreamRunOptions, RunConfig, Runner } from './run';
 import { toFunctionToolName } from './utils/tools';
 import { getOutputText } from './utils/messages';
 import { isAgentToolInput } from './utils/typeGuards';
@@ -33,6 +36,36 @@ import { ModelBehaviorError, UserError } from './errors';
 import { RunToolApprovalItem } from './items';
 import logger from './logger';
 import { UnknownContext, TextOutput } from './types';
+import type * as protocol from './types/protocol';
+
+type AnyAgentRunResult = RunResult<any, Agent<any, any>>;
+
+// Per-process, ephemeral map linking a function tool call to its nested
+// Agent run result within the same run; entry is removed after consumption.
+const agentToolRunResults = new WeakMap<
+  protocol.FunctionCallItem,
+  AnyAgentRunResult
+>();
+
+export function saveAgentToolRunResult(
+  toolCall: protocol.FunctionCallItem | undefined,
+  runResult: AnyAgentRunResult,
+): void {
+  if (toolCall) {
+    agentToolRunResults.set(toolCall, runResult);
+  }
+}
+
+export function consumeAgentToolRunResult(
+  toolCall: protocol.FunctionCallItem,
+): AnyAgentRunResult | undefined {
+  const runResult = agentToolRunResults.get(toolCall);
+  if (runResult) {
+    agentToolRunResults.delete(toolCall);
+  }
+
+  return runResult;
+}
 
 export type ToolUseBehaviorFlags = 'run_llm_again' | 'stop_on_first_tool';
 
@@ -283,6 +316,9 @@ export type AgentConfigWithHandoffs<
   >
 >;
 
+// The parameter type fo needApproval function for the tool created by Agent.asTool() method
+const AgentAsToolNeedApprovalSchame = z.object({ input: z.string() });
+
 /**
  * The class representing an AI agent configured with instructions, tools, guardrails, handoffs and more.
  *
@@ -468,37 +504,86 @@ export class Agent<
     customOutputExtractor?: (
       output: RunResult<TContext, Agent<TContext, any>>,
     ) => string | Promise<string>;
-  }): FunctionTool {
-    const { toolName, toolDescription, customOutputExtractor } = options;
+    /**
+     * Whether invoking this tool requires approval, matching the behavior of {@link tool} helpers.
+     * When provided as a function it receives the tool arguments and can implement custom approval
+     * logic.
+     */
+    needsApproval?:
+      | boolean
+      | ToolApprovalFunction<typeof AgentAsToolNeedApprovalSchame>;
+    /**
+     * Run configuration for initializing the internal agent runner.
+     */
+    runConfig?: Partial<RunConfig>;
+    /**
+     * Additional run options for the agent (as tool) execution.
+     */
+    runOptions?: NonStreamRunOptions<TContext>;
+
+    /**
+     * Determines whether this tool should be exposed to the model for the current run.
+     */
+    isEnabled?:
+      | boolean
+      | ((args: {
+          runContext: RunContext<TContext>;
+          agent: Agent<TContext, TOutput>;
+        }) => boolean | Promise<boolean>);
+  }): FunctionTool<TContext, typeof AgentAsToolNeedApprovalSchame> {
+    const {
+      toolName,
+      toolDescription,
+      customOutputExtractor,
+      needsApproval,
+      runConfig,
+      runOptions,
+      isEnabled,
+    } = options;
     return tool({
       name: toolName ?? toFunctionToolName(this.name),
       description: toolDescription ?? '',
-      parameters: {
-        type: 'object',
-        properties: {
-          input: {
-            type: 'string',
-          },
-        },
-        required: ['input'],
-        additionalProperties: false,
-      },
+      parameters: AgentAsToolNeedApprovalSchame,
       strict: true,
-      execute: async (data, context) => {
+      needsApproval,
+      isEnabled,
+      execute: async (data, context, details) => {
         if (!isAgentToolInput(data)) {
           throw new ModelBehaviorError('Agent tool called with invalid input');
         }
-
-        const runner = new Runner();
+        const runner = new Runner(runConfig ?? {});
         const result = await runner.run(this, data.input, {
-          context: context?.context,
+          context,
+          ...(runOptions ?? {}),
         });
-        if (typeof customOutputExtractor === 'function') {
-          return customOutputExtractor(result as any);
+
+        const usesStopAtToolNames =
+          typeof this.toolUseBehavior === 'object' &&
+          this.toolUseBehavior !== null &&
+          'stopAtToolNames' in this.toolUseBehavior;
+
+        if (
+          typeof customOutputExtractor !== 'function' &&
+          usesStopAtToolNames
+        ) {
+          logger.debug(
+            `You're passing the agent (name: ${this.name}) with toolUseBehavior.stopAtToolNames configured as a tool to a different agent; this may not work as you expect. You may want to have a wrapper function tool to consistently return the final output.`,
+          );
         }
-        return getOutputText(
-          result.rawResponses[result.rawResponses.length - 1],
-        );
+        const outputText =
+          typeof customOutputExtractor === 'function'
+            ? await customOutputExtractor(result as any)
+            : getOutputText(
+                result.rawResponses[result.rawResponses.length - 1],
+              );
+
+        if (details?.toolCall) {
+          saveAgentToolRunResult(
+            details.toolCall,
+            result as RunResult<any, Agent<any, any>>,
+          );
+        }
+        return outputText;
       },
     });
   }
@@ -561,7 +646,47 @@ export class Agent<
   async getAllTools(
     runContext: RunContext<TContext>,
   ): Promise<Tool<TContext>[]> {
-    return [...(await this.getMcpTools(runContext)), ...this.tools];
+    const mcpTools = await this.getMcpTools(runContext);
+    const enabledTools: Tool<TContext>[] = [];
+
+    for (const candidate of this.tools) {
+      if (candidate.type === 'function') {
+        const maybeIsEnabled = (
+          candidate as { isEnabled?: ToolEnabledFunction<TContext> | boolean }
+        ).isEnabled;
+
+        const enabled =
+          typeof maybeIsEnabled === 'function'
+            ? await maybeIsEnabled(runContext, this)
+            : typeof maybeIsEnabled === 'boolean'
+              ? maybeIsEnabled
+              : true;
+        if (!enabled) {
+          continue;
+        }
+      }
+      enabledTools.push(candidate);
+    }
+
+    return [...mcpTools, ...enabledTools];
+  }
+
+  /**
+   * Returns the handoffs that should be exposed to the model for the current run.
+   *
+   * Handoffs that provide an `isEnabled` function returning `false` are omitted.
+   */
+  async getEnabledHandoffs(
+    runContext: RunContext<TContext>,
+  ): Promise<Handoff<any, any>[]> {
+    const handoffs = this.handoffs?.map((h) => getHandoff(h)) ?? [];
+    const enabled: Handoff<any, any>[] = [];
+    for (const handoff of handoffs) {
+      if (await handoff.isEnabled({ runContext, agent: this })) {
+        enabled.push(handoff);
+      }
+    }
+    return enabled;
   }
 
   /**

@@ -1,5 +1,58 @@
 # @openai/agents-openai
 
+## 0.1.7
+
+### Patch Changes
+
+- Updated dependencies [becabb9]
+- Updated dependencies [0fd8b6e]
+- Updated dependencies [be686e9]
+- Updated dependencies [74a6ca3]
+  - @openai/agents-core@0.1.7
+
+## 0.1.6
+
+### Patch Changes
+
+- 3115177: Add typed reasoning / text options to ModelSettings
+- Updated dependencies [3115177]
+- Updated dependencies [8516799]
+  - @openai/agents-core@0.1.6
+
+## 0.1.4
+
+### Patch Changes
+
+- Updated dependencies [5f4e139]
+- Updated dependencies [9147a6a]
+  - @openai/agents-core@0.1.4
+
+## 0.1.3
+
+### Patch Changes
+
+- 74dd52e: fix: #473 upgrade openai package to the latest and fix breaking errors
+- Updated dependencies [74dd52e]
+  - @openai/agents-core@0.1.3
+
+## 0.1.2
+
+### Patch Changes
+
+- 7fa0434: Refactor audio extraction logic in converter
+- Updated dependencies [01fad84]
+- Updated dependencies [3d652e8]
+  - @openai/agents-core@0.1.2
+
+## 0.1.1
+
+### Patch Changes
+
+- Updated dependencies [b4d315b]
+- Updated dependencies [a1c43dd]
+- Updated dependencies [2c43bcc]
+  - @openai/agents-core@0.1.1
+
 ## 0.1.0
 
 ### Patch Changes

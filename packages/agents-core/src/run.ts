@@ -9,7 +9,7 @@ import {
   OutputGuardrailFunctionArgs,
   OutputGuardrailMetadata,
 } from './guardrail';
-import { getHandoff, Handoff, HandoffInputFilter } from './handoff';
+import { Handoff, HandoffInputFilter } from './handoff';
 import {
   Model,
   ModelProvider,
@@ -39,6 +39,7 @@ import {
   maybeResetToolChoice,
   ProcessedResponse,
   processModelResponse,
+  streamStepItemsToRunResult,
 } from './runImplementation';
 import { RunItem } from './items';
 import {
@@ -308,12 +309,9 @@ export class Runner extends RunHooks<any, AgentOutputType<unknown>> {
           }
 
           if (state._currentStep.type === 'next_step_run_again') {
-            const handoffs: Handoff<any>[] = [];
-            if (state._currentAgent.handoffs) {
-              // While this array usually must not be undefined,
-              // we've added this check to prevent unexpected runtime errors like https://github.com/openai/openai-agents-js/issues/138
-              handoffs.push(...state._currentAgent.handoffs.map(getHandoff));
-            }
+            const handoffs = await state._currentAgent.getEnabledHandoffs(
+              state._context,
+            );
 
             if (!state._currentAgentSpan) {
               const handoffNames = handoffs.map((h) => h.agentName);
@@ -628,7 +626,9 @@ export class Runner extends RunHooks<any, AgentOutputType<unknown>> {
     try {
       while (true) {
         const currentAgent = result.state._currentAgent;
-        const handoffs = currentAgent.handoffs.map(getHandoff);
+        const handoffs = await currentAgent.getEnabledHandoffs(
+          result.state._context,
+        );
         const tools = await currentAgent.getAllTools(result.state._context);
         const serializedTools = tools.map((t) => serializeTool(t));
         const serializedHandoffs = handoffs.map((h) => serializeHandoff(h));
@@ -808,6 +808,14 @@ export class Runner extends RunHooks<any, AgentOutputType<unknown>> {
           );
 
           result.state._lastProcessedResponse = processedResponse;
+
+          // Record the items emitted directly from the model response so we do not
+          // stream them again after tools and other side effects finish.
+          const preToolItems = new Set(processedResponse.newItems);
+          if (preToolItems.size > 0) {
+            streamStepItemsToRunResult(result, processedResponse.newItems);
+          }
+
           const turnResult = await executeToolsAndSideEffects<TContext>(
             currentAgent,
             result.state._originalInput,
@@ -818,7 +826,9 @@ export class Runner extends RunHooks<any, AgentOutputType<unknown>> {
             result.state,
           );
 
-          addStepToRunResult(result, turnResult);
+          addStepToRunResult(result, turnResult, {
+            skipItems: preToolItems,
+          });
 
           result.state._toolUseTracker.addToolUse(
             currentAgent,
@@ -1090,10 +1100,19 @@ function adjustModelSettingsForNonGPT5RunnerModel(
       agentModelSettings.providerData?.text?.verbosity ||
       (agentModelSettings.providerData as any)?.reasoning_effort)
   ) {
+    const copiedModelSettings = { ...modelSettings };
     // the incompatible parameters should be removed to avoid runtime errors
-    delete modelSettings.providerData?.reasoning;
-    delete (modelSettings.providerData as any)?.text?.verbosity;
-    delete (modelSettings.providerData as any)?.reasoning_effort;
+    delete copiedModelSettings.providerData?.reasoning;
+    delete (copiedModelSettings.providerData as any)?.text?.verbosity;
+    delete (copiedModelSettings.providerData as any)?.reasoning_effort;
+    if (copiedModelSettings.reasoning) {
+      delete copiedModelSettings.reasoning.effort;
+      delete copiedModelSettings.reasoning.summary;
+    }
+    if (copiedModelSettings.text) {
+      delete copiedModelSettings.text.verbosity;
+    }
+    return copiedModelSettings;
   }
   return modelSettings;
 }

@@ -1,5 +1,10 @@
 import { FunctionCallResultItem } from './types/protocol';
-import { Agent, AgentOutputType, ToolsToFinalOutputResult } from './agent';
+import {
+  Agent,
+  AgentOutputType,
+  ToolsToFinalOutputResult,
+  consumeAgentToolRunResult,
+} from './agent';
 import { ModelBehaviorError, ToolCallError, UserError } from './errors';
 import { getTransferMessage, Handoff, HandoffInputData } from './handoff';
 import {
@@ -41,7 +46,7 @@ import * as ProviderData from './types/providerData';
 
 type ToolRunHandoff = {
   toolCall: protocol.FunctionCallItem;
-  handoff: Handoff;
+  handoff: Handoff<any, any>;
 };
 
 type ToolRunFunction<TContext = UnknownContext> = {
@@ -76,7 +81,7 @@ export function processModelResponse<TContext>(
   modelResponse: ModelResponse,
   agent: Agent<any, any>,
   tools: Tool<TContext>[],
-  handoffs: Handoff[],
+  handoffs: Handoff<any, any>[],
 ): ProcessedResponse<TContext> {
   const items: RunItem[] = [];
   const runHandoffs: ToolRunHandoff[] = [];
@@ -559,7 +564,24 @@ export async function executeToolsAndSideEffects<TContext>(
     );
   }
 
-  // check if the agent produced any messages
+  // If the model issued any tool calls or handoffs in this turn,
+  // we must NOT treat any assistant message in the same turn as the final output.
+  // We should run the loop again so the model can see the tool results and respond.
+  const hadToolCallsOrActions =
+    (processedResponse.functions?.length ?? 0) > 0 ||
+    (processedResponse.computerActions?.length ?? 0) > 0 ||
+    (processedResponse.mcpApprovalRequests?.length ?? 0) > 0 ||
+    (processedResponse.handoffs?.length ?? 0) > 0;
+  if (hadToolCallsOrActions) {
+    return new SingleStepResult(
+      originalInput,
+      newResponse,
+      preStepItems,
+      newItems,
+      { type: 'next_step_run_again' },
+    );
+  }
+  // No tool calls/actions in this turn; safe to consider a plain assistant message as final.
   const messageItems = newItems.filter(
     (item) => item instanceof RunMessageOutputItem,
   );
@@ -583,44 +605,49 @@ export async function executeToolsAndSideEffects<TContext>(
     );
   }
 
-  if (
-    agent.outputType === 'text' &&
-    !processedResponse.hasToolsOrApprovalsToRun()
-  ) {
-    return new SingleStepResult(
-      originalInput,
-      newResponse,
-      preStepItems,
-      newItems,
-      {
-        type: 'next_step_final_output',
-        output: potentialFinalOutput,
-      },
-    );
-  } else if (agent.outputType !== 'text' && potentialFinalOutput) {
-    // Structured output schema => always leads to a final output if we have text
-    const { parser } = getSchemaAndParserFromInputType(
-      agent.outputType,
-      'final_output',
-    );
-    const [error] = await safeExecute(() => parser(potentialFinalOutput));
-    if (error) {
-      addErrorToCurrentSpan({
-        message: 'Invalid output type',
-        data: {
-          error: String(error),
+  const hasPendingToolsOrApprovals = functionResults.some(
+    (result) => result.runItem instanceof RunToolApprovalItem,
+  );
+
+  if (!hasPendingToolsOrApprovals) {
+    if (agent.outputType === 'text') {
+      return new SingleStepResult(
+        originalInput,
+        newResponse,
+        preStepItems,
+        newItems,
+        {
+          type: 'next_step_final_output',
+          output: potentialFinalOutput,
         },
-      });
-      throw new ModelBehaviorError('Invalid output type');
+      );
     }
 
-    return new SingleStepResult(
-      originalInput,
-      newResponse,
-      preStepItems,
-      newItems,
-      { type: 'next_step_final_output', output: potentialFinalOutput },
-    );
+    if (agent.outputType !== 'text' && potentialFinalOutput) {
+      // Structured output schema => always leads to a final output if we have text.
+      const { parser } = getSchemaAndParserFromInputType(
+        agent.outputType,
+        'final_output',
+      );
+      const [error] = await safeExecute(() => parser(potentialFinalOutput));
+      if (error) {
+        addErrorToCurrentSpan({
+          message: 'Invalid output type',
+          data: {
+            error: String(error),
+          },
+        });
+        throw new ModelBehaviorError('Invalid output type');
+      }
+
+      return new SingleStepResult(
+        originalInput,
+        newResponse,
+        preStepItems,
+        newItems,
+        { type: 'next_step_final_output', output: potentialFinalOutput },
+      );
+    }
   }
 
   return new SingleStepResult(
@@ -738,12 +765,13 @@ export async function executeFunctionToolCalls<TContext = UnknownContext>(
           agent.emit('agent_tool_start', state._context, toolRun.tool, {
             toolCall: toolRun.toolCall,
           });
-          const result = await toolRun.tool.invoke(
+          const toolOutput = await toolRun.tool.invoke(
             state._context,
             toolRun.toolCall.arguments,
+            { toolCall: toolRun.toolCall },
           );
           // Use string data for tracing and event emitter
-          const stringResult = toSmartString(result);
+          const stringResult = toSmartString(toolOutput);
 
           runner.emit(
             'agent_tool_end',
@@ -765,16 +793,27 @@ export async function executeFunctionToolCalls<TContext = UnknownContext>(
             span.spanData.output = stringResult;
           }
 
-          return {
+          const functionResult: FunctionToolResult = {
             type: 'function_output' as const,
             tool: toolRun.tool,
-            output: result,
+            output: toolOutput,
             runItem: new RunToolCallOutputItem(
-              getToolCallOutputItem(toolRun.toolCall, result),
+              getToolCallOutputItem(toolRun.toolCall, toolOutput),
               agent,
-              result,
+              toolOutput,
             ),
           };
+
+          const nestedRunResult = consumeAgentToolRunResult(toolRun.toolCall);
+          if (nestedRunResult) {
+            functionResult.agentRunResult = nestedRunResult;
+            const nestedInterruptions = nestedRunResult.interruptions;
+            if (nestedInterruptions.length > 0) {
+              functionResult.interruptions = nestedInterruptions;
+            }
+          }
+
+          return functionResult;
         } catch (error) {
           span.setError({
             message: 'Error running tool',
@@ -1071,9 +1110,23 @@ export async function checkForFinalOutputFromTools<
     return NOT_FINAL_OUTPUT;
   }
 
-  const interruptions: RunToolApprovalItem[] = toolResults
-    .filter((r) => r.runItem instanceof RunToolApprovalItem)
-    .map((r) => r.runItem as RunToolApprovalItem);
+  const interruptions: RunToolApprovalItem[] = [];
+  for (const result of toolResults) {
+    if (result.runItem instanceof RunToolApprovalItem) {
+      interruptions.push(result.runItem);
+    }
+
+    if (result.type === 'function_output') {
+      if (Array.isArray(result.interruptions)) {
+        interruptions.push(...result.interruptions);
+      } else if (result.agentRunResult) {
+        const nestedInterruptions = result.agentRunResult.interruptions;
+        if (nestedInterruptions.length > 0) {
+          interruptions.push(...nestedInterruptions);
+        }
+      }
+    }
+  }
 
   if (interruptions.length > 0) {
     return {
@@ -1123,32 +1176,69 @@ export async function checkForFinalOutputFromTools<
   throw new UserError(`Invalid toolUseBehavior: ${toolUseBehavior}`, state);
 }
 
+function getRunItemStreamEventName(
+  item: RunItem,
+): RunItemStreamEventName | undefined {
+  if (item instanceof RunMessageOutputItem) {
+    return 'message_output_created';
+  }
+  if (item instanceof RunHandoffCallItem) {
+    return 'handoff_requested';
+  }
+  if (item instanceof RunHandoffOutputItem) {
+    return 'handoff_occurred';
+  }
+  if (item instanceof RunToolCallItem) {
+    return 'tool_called';
+  }
+  if (item instanceof RunToolCallOutputItem) {
+    return 'tool_output';
+  }
+  if (item instanceof RunReasoningItem) {
+    return 'reasoning_item_created';
+  }
+  if (item instanceof RunToolApprovalItem) {
+    return 'tool_approval_requested';
+  }
+  return undefined;
+}
+
+function enqueueRunItemStreamEvent(
+  result: StreamedRunResult<any, any>,
+  item: RunItem,
+): void {
+  const itemName = getRunItemStreamEventName(item);
+  if (!itemName) {
+    logger.warn('Unknown item type: ', item);
+    return;
+  }
+  result._addItem(new RunItemStreamEvent(itemName, item));
+}
+
+export function streamStepItemsToRunResult(
+  result: StreamedRunResult<any, any>,
+  items: RunItem[],
+): void {
+  // Preserve the order in which items were generated by enqueueing each one
+  // immediately on the streamed result.
+  for (const item of items) {
+    enqueueRunItemStreamEvent(result, item);
+  }
+}
+
 export function addStepToRunResult(
   result: StreamedRunResult<any, any>,
   step: SingleStepResult,
+  options?: { skipItems?: Set<RunItem> },
 ): void {
+  // skipItems contains run items that were already streamed so we avoid
+  // enqueueing duplicate events for the same instance.
+  const skippedItems = options?.skipItems;
   for (const item of step.newStepItems) {
-    let itemName: RunItemStreamEventName;
-    if (item instanceof RunMessageOutputItem) {
-      itemName = 'message_output_created';
-    } else if (item instanceof RunHandoffCallItem) {
-      itemName = 'handoff_requested';
-    } else if (item instanceof RunHandoffOutputItem) {
-      itemName = 'handoff_occurred';
-    } else if (item instanceof RunToolCallItem) {
-      itemName = 'tool_called';
-    } else if (item instanceof RunToolCallOutputItem) {
-      itemName = 'tool_output';
-    } else if (item instanceof RunReasoningItem) {
-      itemName = 'reasoning_item_created';
-    } else if (item instanceof RunToolApprovalItem) {
-      itemName = 'tool_approval_requested';
-    } else {
-      logger.warn('Unknown item type: ', item);
+    if (skippedItems?.has(item)) {
       continue;
     }
-
-    result._addItem(new RunItemStreamEvent(itemName, item));
+    enqueueRunItemStreamEvent(result, item);
   }
 }
 
